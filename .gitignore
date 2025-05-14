@@ -6,7 +6,6 @@ env/
 venv/
 .env
 *.pyc
-django/
 
 # Node
 node_modules/
