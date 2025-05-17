@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, SafeAreaView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, SafeAreaView, RefreshControl, TouchableOpacity, Alert, useWindowDimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import RenderHtml from 'react-native-render-html';
 import authService from '@/services/authService';
 import axios from 'axios';
 
@@ -24,6 +25,7 @@ interface Chapter {
 export default function ChapterScreen() {
     const router = useRouter();
     const { id, courseId } = useLocalSearchParams();
+    const { width } = useWindowDimensions();
     const [chapter, setChapter] = useState<Chapter | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -102,16 +104,37 @@ export default function ChapterScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity 
-                    style={styles.backButton}
-                    onPress={() => router.push({
-                        pathname: "/course/[id]",
-                        params: { id: courseId as string }
-                    })}
-                >
-                    <Text style={styles.backButtonText}>← Back to Course</Text>
-                </TouchableOpacity>
-                <Text style={styles.title}>{chapter.title}</Text>
+                <View style={styles.headerTop}>
+                    <TouchableOpacity 
+                        style={styles.backButton}
+                        onPress={() => router.push({
+                            pathname: "/course/[id]",
+                            params: { id: courseId as string }
+                        })}
+                    >
+                        <Text style={styles.backButtonText}>← Back to Course</Text>
+                    </TouchableOpacity>
+                    {chapter?.notes.length > 0 && (
+                        <View style={styles.headerActions}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    router.push({
+                                        pathname: "/chapter/edit",
+                                        params: {
+                                            courseId,
+                                            chapterId: id,
+                                            initialContent: chapter.notes[0]?.content
+                                        }
+                                    });
+                                }}
+                                style={styles.headerButton}
+                            >
+                                <Text style={styles.editButton}>Edit</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.title}>{chapter?.title}</Text>
             </View>
             
             <ScrollView 
@@ -127,7 +150,7 @@ export default function ChapterScreen() {
                     />
                 }
             >
-                {chapter.notes.length === 0 ? (
+                {(!chapter?.notes || chapter.notes.length === 0) ? (
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyStateText}>No content yet</Text>
                         <TouchableOpacity 
@@ -147,66 +170,102 @@ export default function ChapterScreen() {
                     </View>
                 ) : (
                     chapter.notes.map(note => (
-                        <View key={note.id} style={styles.noteCard}>
-                            <View style={styles.noteHeader}>
-                                <Text style={styles.noteMeta}>
-                                    Last updated: {new Date(note.updated_at).toLocaleDateString()}
-                                </Text>
-                                <View style={styles.noteActions}>
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            router.push({
-                                                pathname: "/chapter/edit",
-                                                params: {
-                                                    courseId,
-                                                    chapterId: id,
-                                                    initialContent: note.content
-                                                }
-                                            });
-                                        }}
-                                    >
-                                        <Text style={styles.editButton}>Edit</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            Alert.alert(
-                                                'Delete Content',
-                                                'Are you sure you want to delete this content?',
-                                                [
-                                                    {
-                                                        text: 'Cancel',
-                                                        style: 'cancel'
-                                                    },
-                                                    {
-                                                        text: 'Delete',
-                                                        style: 'destructive',
-                                                        onPress: async () => {
-                                                            try {
-                                                                const token = await authService.getToken();
-                                                                await axios.delete(
-                                                                    `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${id}/notes/${note.id}/`,
-                                                                    {
-                                                                        headers: {
-                                                                            'Authorization': `Bearer ${token}`
-                                                                        }
-                                                                    }
-                                                                );
-                                                                fetchChapter();
-                                                            } catch (error) {
-                                                                console.error('Error deleting note:', error);
-                                                                Alert.alert('Error', 'Failed to delete content');
-                                                            }
-                                                        }
-                                                    }
-                                                ]
-                                            );
-                                        }}
-                                    >
-                                        <Text style={styles.deleteButton}>Delete</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                            <Text style={styles.noteContent}>{note.content}</Text>
+                        <View 
+                            key={note.id} 
+                            style={styles.noteContainer}
+                        >
+                            <Text style={styles.lastUpdated}>
+                                Last updated: {new Date(note.updated_at).toLocaleDateString()}
+                            </Text>
+                            <RenderHtml
+                                contentWidth={width}
+                                source={{ html: note.content }}
+                                tagsStyles={{
+                                    h1: {
+                                        fontSize: 28,
+                                        fontWeight: 'bold',
+                                        color: '#333',
+                                        marginVertical: 16,
+                                    },
+                                    h2: {
+                                        fontSize: 24,
+                                        fontWeight: 'bold',
+                                        color: '#333',
+                                        marginVertical: 12,
+                                    },
+                                    h3: {
+                                        fontSize: 20,
+                                        fontWeight: 'bold',
+                                        color: '#333',
+                                        marginVertical: 8,
+                                    },
+                                    p: {
+                                        fontSize: 16,
+                                        color: '#333',
+                                        lineHeight: 24,
+                                        marginVertical: 8,
+                                    },
+                                    ul: {
+                                        marginLeft: 20,
+                                    },
+                                    ol: {
+                                        marginLeft: 20,
+                                    },
+                                    li: {
+                                        fontSize: 16,
+                                        color: '#333',
+                                        lineHeight: 24,
+                                    },
+                                    strong: {
+                                        fontWeight: 'bold',
+                                    },
+                                    b: {
+                                        fontWeight: 'bold',
+                                    },
+                                    em: {
+                                        fontStyle: 'italic',
+                                    },
+                                    i: {
+                                        fontStyle: 'italic',
+                                    },
+                                    u: {
+                                        textDecorationLine: 'underline',
+                                    },
+                                    strike: {
+                                        textDecorationLine: 'line-through',
+                                    },
+                                    a: {
+                                        color: '#007AFF',
+                                        textDecorationLine: 'underline',
+                                    },
+                                    blockquote: {
+                                        borderLeftWidth: 4,
+                                        borderLeftColor: '#666',
+                                        paddingLeft: 16,
+                                        marginLeft: 0,
+                                        fontStyle: 'italic',
+                                    },
+                                    code: {
+                                        fontFamily: 'monospace',
+                                        backgroundColor: '#f5f5f5',
+                                        padding: 4,
+                                        borderRadius: 4,
+                                    },
+                                    pre: {
+                                        backgroundColor: '#f5f5f5',
+                                        padding: 8,
+                                        borderRadius: 4,
+                                        marginVertical: 8,
+                                    }
+                                }}
+                                enableExperimentalBRCollapsing={true}
+                                enableExperimentalGhostLinesPrevention={true}
+                                baseStyle={{
+                                    color: '#333',
+                                    fontSize: 16,
+                                    lineHeight: 24,
+                                }}
+                            />
                         </View>
                     ))
                 )}
@@ -232,8 +291,22 @@ const styles = StyleSheet.create({
         borderBottomColor: '#e0e0e0',
         padding: 16,
     },
-    backButton: {
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 16,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        gap: 16,
+    },
+    headerButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+    },
+    backButton: {
+        marginBottom: 0,
     },
     backButtonText: {
         fontSize: 16,
@@ -249,30 +322,41 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
         textAlign: 'center',
+        marginTop: 24,
     },
     scrollView: {
         flex: 1,
     },
     scrollContent: {
         padding: 16,
-        paddingTop: 0,
+    },
+    noteContainer: {
+        backgroundColor: '#fff',
+        padding: 16,
+        marginBottom: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    lastUpdated: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 8,
     },
     emptyState: {
-        flex: 1,
-        justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
-        marginTop: 50,
+        justifyContent: 'center',
+        padding: 24,
     },
     emptyStateText: {
-        fontSize: 16,
+        fontSize: 18,
         color: '#666',
         marginBottom: 16,
     },
     emptyStateButton: {
         backgroundColor: '#007AFF',
-        paddingHorizontal: 20,
         paddingVertical: 12,
+        paddingHorizontal: 24,
         borderRadius: 8,
     },
     emptyStateButtonText: {
@@ -280,48 +364,9 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    noteCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
-    },
-    noteHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    noteContent: {
-        fontSize: 16,
-        color: '#333',
-        marginBottom: 8,
-    },
-    noteMeta: {
-        fontSize: 12,
-        color: '#666',
-    },
-    noteActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
     editButton: {
         color: '#007AFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    deleteButton: {
-        color: '#FF3B30',
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '600',
     },
 }); 

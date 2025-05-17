@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
 import authService from '@/services/authService';
 import axios from 'axios';
 
 export default function EditChapterScreen() {
     const router = useRouter();
-    const { courseId, chapterId, initialContent } = useLocalSearchParams();
-    const [content, setContent] = useState(initialContent as string || '');
+    const params = useLocalSearchParams();
+    const courseId = typeof params.courseId === 'string' ? params.courseId : '';
+    const chapterId = typeof params.chapterId === 'string' ? params.chapterId : '';
+    const initialContent = typeof params.initialContent === 'string' ? params.initialContent : '';
+    const [content, setContent] = useState(initialContent || '');
     const [loading, setLoading] = useState(false);
+    const richText = useRef<RichEditor>(null);
 
     const handleSave = async () => {
         if (!content.trim()) {
@@ -65,7 +70,7 @@ export default function EditChapterScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.backButton}
                     onPress={() => router.push({
                         pathname: "/chapter/[id]",
@@ -79,16 +84,51 @@ export default function EditChapterScreen() {
                 </Text>
             </View>
 
-            <View style={styles.form}>
-                <TextInput
-                    style={styles.input}
-                    value={content}
-                    onChangeText={setContent}
-                    placeholder="Enter chapter content..."
-                    placeholderTextColor="#999"
-                    multiline
-                    textAlignVertical="top"
-                    numberOfLines={10}
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                style={styles.editorContainer}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 80}
+            >
+                <ScrollView style={styles.editor} contentContainerStyle={styles.editorContent}>
+                    <RichEditor
+                        ref={richText}
+                        onChange={setContent}
+                        initialContentHTML={content}
+                        placeholder="Start typing your content here..."
+                        style={styles.richEditor}
+                    />
+                </ScrollView>
+                
+                <RichToolbar
+                    editor={richText}
+                    actions={[
+                        // Headings
+                        actions.heading2,
+                        actions.heading3,
+                        '|', // separator
+                        // Text formatting
+                        actions.setBold,
+                        actions.setItalic,
+                        '|', // separator
+                        // Lists
+                        actions.insertBulletsList,
+                        actions.insertOrderedList,
+                        '|', // separator
+                        // Undo/Redo
+                        actions.undo,
+                        actions.redo,
+                    ]}
+                    iconMap={{
+                        [actions.heading2]: ({ tintColor }: { tintColor: string }) => (
+                            <Text style={[styles.toolbarButton, { color: tintColor }]}>H1</Text>
+                        ),
+                        [actions.heading3]: ({ tintColor }: { tintColor: string }) => (
+                            <Text style={[styles.toolbarButton, { color: tintColor }]}>H2</Text>
+                        ),
+                    }}
+                    selectedIconTint="#007AFF"
+                    iconTint="#666666"
+                    style={styles.toolbar}
                 />
 
                 <TouchableOpacity 
@@ -103,7 +143,7 @@ export default function EditChapterScreen() {
                         {loading ? 'Saving...' : 'Save Content'}
                     </Text>
                 </TouchableOpacity>
-            </View>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -131,19 +171,27 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
-    form: {
-        padding: 16,
+    editorContainer: {
         flex: 1,
+        padding: 16,
     },
-    input: {
+    editor: {
+        flex: 1,
         backgroundColor: '#fff',
         borderRadius: 8,
-        padding: 12,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        marginBottom: 20,
+        marginBottom: 16,
+    },
+    editorContent: {
+        paddingBottom: 16,
+    },
+    richEditor: {
         minHeight: 200,
+        flex: 1,
+    },
+    toolbar: {
+        backgroundColor: '#f8f8f8',
+        borderRadius: 8,
+        marginBottom: 16,
     },
     submitButton: {
         backgroundColor: '#007AFF',
@@ -158,5 +206,10 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    toolbarButton: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#666666',
     },
 }); 

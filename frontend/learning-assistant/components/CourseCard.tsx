@@ -11,13 +11,22 @@ interface Course {
 interface CourseCardProps {
     course: Course;
     onPress: () => void;
-    onDelete: () => void;
+    isSelected: boolean;
+    onSelect: () => void;
 }
 
-export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, onDelete }) => {
+export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, isSelected, onSelect }) => {
     return (
-        <View style={styles.card}>
-            <TouchableOpacity style={styles.content} onPress={onPress}>
+        <TouchableOpacity 
+            style={[
+                styles.card,
+                isSelected && styles.selectedCard
+            ]} 
+            onPress={onPress}
+            onLongPress={onSelect}
+            delayLongPress={200}
+        >
+            <View style={styles.content}>
                 <Text style={styles.title}>{course.title}</Text>
                 <Text style={styles.description} numberOfLines={2}>
                     {course.description}
@@ -28,14 +37,14 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, onDelet
                         <Text style={styles.progressText}>{course.progress}% Complete</Text>
                     </View>
                 )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={onDelete}
-            >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-            </TouchableOpacity>
-        </View>
+            </View>
+            <View style={styles.actions}>
+                {isSelected && (
+                    <Text style={styles.selectedText}>Selected</Text>
+                )}
+                <Text style={styles.arrow}>→</Text>
+            </View>
+        </TouchableOpacity>
     );
 };
 
@@ -52,10 +61,14 @@ const styles = StyleSheet.create({
         elevation: 3,
         flexDirection: 'row',
         alignItems: 'center',
+        padding: 16,
+    },
+    selectedCard: {
+        borderWidth: 2,
+        borderColor: '#007AFF',
     },
     content: {
         flex: 1,
-        padding: 16,
     },
     title: {
         fontSize: 18,
@@ -90,16 +103,19 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: 'bold',
     },
-    deleteButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        backgroundColor: '#FF3B30',
-        marginRight: 16,
+    actions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
-    deleteButtonText: {
-        color: '#fff',
+    selectedText: {
+        color: '#007AFF',
         fontSize: 14,
-        fontWeight: 'bold',
+        fontWeight: '600',
+    },
+    arrow: {
+        fontSize: 20,
+        color: '#007AFF',
+        marginLeft: 8,
     },
 }); 

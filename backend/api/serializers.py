@@ -11,9 +11,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['email', 'username', 'password', 'password2']
+        fields = ['email', 'username', 'first_name', 'last_name', 'password', 'password2']
         extra_kwargs = {
-            'password': {'write_only': True}
+            'password': {'write_only': True},
+            'first_name': {'required': False},
+            'last_name': {'required': False}
         }
 
     def validate(self, attrs):
@@ -27,9 +29,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
 class UserSerializer(serializers.ModelSerializer):
+    courses_count = serializers.SerializerMethodField()
+
+    def get_courses_count(self, obj):
+        # Count courses owned by the user
+        owned_courses = obj.courses.count()
+        # Count courses the user is enrolled in
+        enrolled_courses = UserCourseProgress.objects.filter(user=obj).count()
+        return owned_courses + enrolled_courses
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'email', 'username', 'bio', 'profile_picture']
+        fields = ['id', 'email', 'username', 'first_name', 'last_name', 'bio', 'profile_picture', 'date_joined', 'courses_count']
+        read_only_fields = ['email', 'date_joined', 'courses_count']
 
 class NoteSerializer(serializers.ModelSerializer):
     class Meta:

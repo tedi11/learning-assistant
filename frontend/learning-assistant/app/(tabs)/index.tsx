@@ -13,40 +13,12 @@ interface Course {
     progress?: number;
 }
 
-interface UserProfile {
-    id: number;
-    email: string;
-    username: string;
-}
-
 export default function HomeScreen() {
     const router = useRouter();
     const [courses, setCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-    const fetchUserProfile = async () => {
-        try {
-            const token = await authService.getToken();
-            if (!token) {
-                router.replace('/(auth)/login');
-                return;
-            }
-
-            const response = await axios.get('http://192.168.1.135:8000/api/profile/', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            setUserProfile(response.data);
-        } catch (error) {
-            console.error('Error fetching user profile:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 401) {
-                router.replace('/(auth)/login');
-            }
-        }
-    };
+    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
 
     const fetchCourses = async () => {
         try {
@@ -75,24 +47,24 @@ export default function HomeScreen() {
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        Promise.all([fetchCourses(), fetchUserProfile()]);
-    }, []);
-
-    useEffect(() => {
-        fetchUserProfile();
+        setSelectedCourseId(null);
         fetchCourses();
     }, []);
 
-    const handleLogout = async () => {
-        await authService.logout();
-        router.replace('/(auth)/login');
-    };
+    useEffect(() => {
+        fetchCourses();
+    }, []);
 
     const handleCoursePress = (course: Course) => {
         router.push(`/course/${course.id}`);
     };
 
-    const handleDeleteCourse = async (course: Course) => {
+    const handleDeleteSelected = async () => {
+        if (!selectedCourseId) {
+            Alert.alert('Error', 'Please select a course to delete');
+            return;
+        }
+
         Alert.alert(
             'Delete Course',
             'Are you sure you want to delete this course? This will also delete all chapters and content within the course.',
@@ -108,14 +80,15 @@ export default function HomeScreen() {
                         try {
                             const token = await authService.getToken();
                             await axios.delete(
-                                `http://192.168.1.135:8000/api/courses/${course.id}/`,
+                                `http://192.168.1.135:8000/api/courses/${selectedCourseId}/`,
                                 {
                                     headers: {
                                         'Authorization': `Bearer ${token}`
                                     }
                                 }
                             );
-                            fetchCourses(); // Refresh the course list
+                            setSelectedCourseId(null);
+                            fetchCourses();
                         } catch (error) {
                             console.error('Error deleting course:', error);
                             Alert.alert('Error', 'Failed to delete course');
@@ -138,15 +111,17 @@ export default function HomeScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <View style={styles.headerTop}>
-                    <Text style={styles.welcomeText}>
-                        Welcome, {userProfile?.username || 'User'}
-                    </Text>
-                    <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                        <Text style={styles.logoutButtonText}>Logout</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.title}>My Courses</Text>
+                    {selectedCourseId && courses.length > 0 && (
+                        <TouchableOpacity
+                            onPress={handleDeleteSelected}
+                            style={styles.deleteButton}
+                        >
+                            <Text style={styles.deleteButtonText}>Delete Selected</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
                 <View style={styles.headerBottom}>
-                    <Text style={styles.title}>My Courses</Text>
                     <TouchableOpacity 
                         style={styles.createButton} 
                         onPress={() => router.push('/create-course')}
@@ -164,8 +139,8 @@ export default function HomeScreen() {
                         refreshing={refreshing}
                         onRefresh={onRefresh}
                         tintColor="#007AFF"
-                        colors={["#007AFF"]} // Android
-                        progressBackgroundColor="#fff" // Android
+                        colors={["#007AFF"]}
+                        progressBackgroundColor="#fff"
                     />
                 }
             >
@@ -185,11 +160,21 @@ export default function HomeScreen() {
                             key={course.id}
                             course={course}
                             onPress={() => handleCoursePress(course)}
-                            onDelete={() => handleDeleteCourse(course)}
+                            isSelected={selectedCourseId === course.id}
+                            onSelect={() => setSelectedCourseId(
+                                selectedCourseId === course.id ? null : course.id
+                            )}
                         />
                     ))
                 )}
             </ScrollView>
+            {courses.length > 0 && (
+                <View style={styles.hintContainer}>
+                    <Text style={styles.hintText}>
+                        Tip: Long press on a course to select it for deletion
+                    </Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -209,7 +194,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#e0e0e0',
-        paddingTop: 20, // Extra padding for notch
+        paddingTop: 20,
     },
     headerTop: {
         flexDirection: 'row',
@@ -217,25 +202,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         paddingBottom: 8,
+        gap: 8,
     },
     headerBottom: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         alignItems: 'center',
         padding: 16,
         paddingTop: 8,
-    },
-    welcomeText: {
-        fontSize: 16,
-        color: '#666',
     },
     title: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#333',
+        flex: 1,
     },
     scrollView: {
         flex: 1,
+        marginBottom: 75,
     },
     scrollContent: {
         paddingVertical: 8,
@@ -274,15 +258,31 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
     },
-    logoutButton: {
+    deleteButton: {
+        paddingVertical: 6,
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        backgroundColor: '#ff3b30',
+        borderRadius: 6,
+        backgroundColor: '#FF3B30',
     },
-    logoutButtonText: {
+    deleteButtonText: {
         color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    hintContainer: {
+        position: 'absolute',
+        bottom: 85,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(245, 245, 245, 0.95)',
+        paddingVertical: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#e0e0e0',
+    },
+    hintText: {
+        fontSize: 12,
+        color: '#666',
+        textAlign: 'center',
+        fontStyle: 'italic',
     },
 });

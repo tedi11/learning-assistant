@@ -22,6 +22,8 @@ interface UserProfile {
     id: number;
     email: string;
     username: string;
+    first_name: string;
+    last_name: string;
     bio?: string;
     profile_picture?: string;
 }
@@ -100,16 +102,25 @@ class AuthService {
         return !!token;
     }
 
-    async register(email: string, username: string, password: string, password2: string): Promise<void> {
+    async register(
+        email: string,
+        username: string,
+        firstName: string,
+        lastName: string,
+        password: string,
+        password2: string
+    ): Promise<void> {
         try {
-            console.log('Attempting to register with:', { email, username });
+            console.log('Attempting to register with:', { email, username, firstName, lastName });
             const response = await axios.post(`${API_URL}/register/`, {
                 email,
                 username,
+                first_name: firstName,
+                last_name: lastName,
                 password,
                 password2
             }, {
-                timeout: 10000, // Increased timeout to 10 seconds
+                timeout: 10000,
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'

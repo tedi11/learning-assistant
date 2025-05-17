@@ -22,22 +22,34 @@ interface Course {
     progress?: number;
 }
 
-function ChapterCard({ chapter, onPress, onDelete }: { chapter: Chapter; onPress: () => void; onDelete: () => void }) {
+function ChapterCard({ chapter, onPress, isSelected, onSelect }: { 
+    chapter: Chapter; 
+    onPress: () => void; 
+    isSelected: boolean;
+    onSelect: () => void;
+}) {
     return (
-        <TouchableOpacity style={styles.chapterCard} onPress={onPress}>
+        <TouchableOpacity 
+            style={[
+                styles.chapterCard,
+                isSelected && styles.selectedChapter
+            ]} 
+            onPress={onPress}
+            onLongPress={onSelect}
+            delayLongPress={200}
+        >
             <View style={styles.chapterContent}>
                 <Text style={styles.chapterTitle}>{chapter.title}</Text>
                 <Text style={styles.chapterMeta}>
                     Last updated: {new Date(chapter.updated_at).toLocaleDateString()}
                 </Text>
             </View>
-            <Text style={styles.chapterArrow}>→</Text>
-            <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={onDelete}
-            >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-            </TouchableOpacity>
+            <View style={styles.chapterActions}>
+                {isSelected && (
+                    <Text style={styles.selectedText}>Selected</Text>
+                )}
+                <Text style={styles.chapterArrow}>→</Text>
+            </View>
         </TouchableOpacity>
     );
 }
@@ -48,6 +60,7 @@ export default function CourseScreen() {
     const [course, setCourse] = useState<Course | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
     const lastFetchRef = useRef<string | null>(null);
     const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,6 +147,46 @@ export default function CourseScreen() {
         });
     };
 
+    const handleDeleteSelected = () => {
+        if (!selectedChapterId) {
+            Alert.alert('Error', 'Please select a chapter to delete');
+            return;
+        }
+
+        Alert.alert(
+            'Delete Chapter',
+            'Are you sure you want to delete this chapter? This will also delete all content within the chapter.',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const token = await authService.getToken();
+                            await axios.delete(
+                                `http://192.168.1.135:8000/api/courses/${id}/chapters/${selectedChapterId}/`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`
+                                    }
+                                }
+                            );
+                            setSelectedChapterId(null);
+                            fetchCourse();
+                        } catch (error) {
+                            console.error('Error deleting chapter:', error);
+                            Alert.alert('Error', 'Failed to delete chapter');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
@@ -168,11 +221,19 @@ export default function CourseScreen() {
                     >
                         <Text style={styles.backButtonText}>← Back</Text>
                     </TouchableOpacity>
+                    {selectedChapterId && course?.chapters.length > 0 && (
+                        <TouchableOpacity
+                            onPress={handleDeleteSelected}
+                            style={styles.deleteButton}
+                        >
+                            <Text style={styles.deleteButtonText}>Delete Selected</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
                 <View style={styles.headerBottom}>
                     <View style={styles.courseInfo}>
-                        <Text style={styles.title}>{course.title}</Text>
-                        {course.description && (
+                        <Text style={styles.title}>{course?.title}</Text>
+                        {course?.description && (
                             <Text style={styles.description}>{course.description}</Text>
                         )}
                     </View>
@@ -193,12 +254,12 @@ export default function CourseScreen() {
                         refreshing={refreshing}
                         onRefresh={onRefresh}
                         tintColor="#007AFF"
-                        colors={["#007AFF"]} // Android
-                        progressBackgroundColor="#fff" // Android
+                        colors={["#007AFF"]}
+                        progressBackgroundColor="#fff"
                     />
                 }
             >
-                {(!course.chapters || course.chapters.length === 0) ? (
+                {(!course?.chapters || course.chapters.length === 0) ? (
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyStateText}>No chapters yet</Text>
                         <TouchableOpacity 
@@ -214,43 +275,21 @@ export default function CourseScreen() {
                             key={chapter.id}
                             chapter={chapter}
                             onPress={() => handleChapterPress(chapter)}
-                            onDelete={async () => {
-                                Alert.alert(
-                                    'Delete Chapter',
-                                    'Are you sure you want to delete this chapter? This will also delete all content within the chapter.',
-                                    [
-                                        {
-                                            text: 'Cancel',
-                                            style: 'cancel'
-                                        },
-                                        {
-                                            text: 'Delete',
-                                            style: 'destructive',
-                                            onPress: async () => {
-                                                try {
-                                                    const token = await authService.getToken();
-                                                    await axios.delete(
-                                                        `http://192.168.1.135:8000/api/courses/${id}/chapters/${chapter.id}/`,
-                                                        {
-                                                            headers: {
-                                                                'Authorization': `Bearer ${token}`
-                                                            }
-                                                        }
-                                                    );
-                                                    fetchCourse();
-                                                } catch (error) {
-                                                    console.error('Error deleting chapter:', error);
-                                                    Alert.alert('Error', 'Failed to delete chapter');
-                                                }
-                                            }
-                                        }
-                                    ]
-                                );
-                            }}
+                            isSelected={selectedChapterId === chapter.id}
+                            onSelect={() => setSelectedChapterId(
+                                selectedChapterId === chapter.id ? null : chapter.id
+                            )}
                         />
                     ))
                 )}
             </ScrollView>
+            {course?.chapters.length > 0 && (
+                <View style={styles.hintContainer}>
+                    <Text style={styles.hintText}>
+                        Tip: Long press on a chapter to select it for deletion
+                    </Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -308,6 +347,7 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
+        marginBottom: 75, // Match the new bottom spacing
     },
     scrollContent: {
         padding: 16,
@@ -362,6 +402,10 @@ const styles = StyleSheet.create({
         shadowRadius: 3,
         elevation: 3,
     },
+    selectedChapter: {
+        borderWidth: 2,
+        borderColor: '#007AFF',
+    },
     chapterContent: {
         flex: 1,
     },
@@ -375,21 +419,46 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#666',
     },
+    chapterActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    selectedText: {
+        color: '#007AFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
     chapterArrow: {
         fontSize: 20,
         color: '#007AFF',
         marginLeft: 8,
     },
     deleteButton: {
+        paddingVertical: 6,
         paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
+        borderRadius: 6,
         backgroundColor: '#FF3B30',
-        marginLeft: 8,
     },
     deleteButtonText: {
         color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    hintContainer: {
+        position: 'absolute',
+        bottom: 85, // Increased to be higher above the tab bar
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(245, 245, 245, 0.95)',
+        paddingVertical: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#e0e0e0',
+    },
+    hintText: {
+        fontSize: 12,
+        color: '#666',
+        textAlign: 'center',
+        fontStyle: 'italic',
     },
 }); 

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-native-pell-rich-editor": "^1.9.0",
+    "react-native-webview": "^13.13.5"
+  }
+}
