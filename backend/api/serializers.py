@@ -46,7 +46,7 @@ class UserSerializer(serializers.ModelSerializer):
 class NoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Note
-        fields = ['id', 'content', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'summary', 'progress', 'created_at', 'updated_at']
 
 class ChapterSerializer(serializers.ModelSerializer):
     notes = NoteSerializer(many=True, read_only=True)

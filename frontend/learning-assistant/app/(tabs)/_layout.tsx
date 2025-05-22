@@ -1,63 +1,61 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
-
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { View } from 'react-native';
+import { CustomTabBar } from '@/components/CustomTabBar';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
-  return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
-          default: {},
-        }),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="create-course"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="course/[id]"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
-  );
+    return (
+        <View style={{ flex: 1 }}>
+            <Tabs
+                screenOptions={{
+                    headerShown: false,
+                    tabBarStyle: { display: 'none' }  // Hide the default tab bar since we're using a custom one
+                }}
+            >
+                <Tabs.Screen
+                    name="index"
+                    options={{
+                        title: 'Home',
+                    }}
+                />
+                <Tabs.Screen
+                    name="chatbot"
+                    options={{
+                        title: 'Assistant',
+                    }}
+                />
+                <Tabs.Screen
+                    name="load_documents"
+                    options={{
+                        title: 'Documents',
+                    }}
+                />
+                <Tabs.Screen
+                    name="profile"
+                    options={{
+                        title: 'Profile',
+                    }}
+                />
+                <Tabs.Screen
+                    name="explore"
+                    options={{
+                        href: null,
+                    }}
+                />
+                <Tabs.Screen
+                    name="create-course"
+                    options={{
+                        href: null,
+                    }}
+                />
+                <Tabs.Screen
+                    name="course/[id]"
+                    options={{
+                        href: null,
+                    }}
+                />
+            </Tabs>
+            <CustomTabBar />
+        </View>
+    );
 }
