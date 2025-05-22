@@ -11,6 +11,12 @@ interface Chapter {
     order: number;
     created_at: string;
     updated_at: string;
+    notes: Array<{
+        id: number;
+        content: string;
+        created_at: string;
+        updated_at: string;
+    }>;
 }
 
 interface Course {
@@ -28,6 +34,11 @@ function ChapterCard({ chapter, onPress, isSelected, onSelect }: {
     isSelected: boolean;
     onSelect: () => void;
 }) {
+    // Get the most recent note's updated_at date
+    const lastUpdateDate = chapter.notes && chapter.notes.length > 0
+        ? chapter.notes[0].updated_at  // Since notes are ordered by updated_at desc
+        : chapter.updated_at;  // Fallback to chapter date if no notes
+
     return (
         <TouchableOpacity 
             style={[
@@ -41,7 +52,13 @@ function ChapterCard({ chapter, onPress, isSelected, onSelect }: {
             <View style={styles.chapterContent}>
                 <Text style={styles.chapterTitle}>{chapter.title}</Text>
                 <Text style={styles.chapterMeta}>
-                    Last updated: {new Date(chapter.updated_at).toLocaleDateString()}
+                    Last updated: {new Date(lastUpdateDate).toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}
                 </Text>
             </View>
             <View style={styles.chapterActions}>
@@ -112,10 +129,10 @@ export default function CourseScreen() {
         }, 100);
     }, [id, fetchCourse]);
 
-    const onRefresh = useCallback(() => {
+    const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        lastFetchRef.current = null; // Reset last fetch to force a refresh
-        fetchCourse();
+        await fetchCourse();
+        setRefreshing(false);
     }, [fetchCourse]);
 
     useFocusEffect(

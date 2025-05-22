@@ -3,7 +3,7 @@ from rest_framework import viewsets, status, generics
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note
 from .serializers import (
     ItemSerializer, 
@@ -13,6 +13,9 @@ from .serializers import (
     ChapterSerializer,
     NoteSerializer
 )
+from transformers import pipeline, AutoTokenizer
+from bs4 import BeautifulSoup
+import re
 
 # Create your views here.
 
@@ -114,11 +117,160 @@ class NoteViewSet(viewsets.ModelViewSet):
         chapter = get_object_or_404(Chapter, id=chapter_id, course=course)
         # Delete any existing notes for this chapter (since we want only one note per chapter)
         Note.objects.filter(chapter=chapter).delete()
-        serializer.save(chapter=chapter)
+        # Create new note with progress explicitly set to 0
+        note = serializer.save(chapter=chapter, progress=0)
+        # Update course progress
+        self.update_course_progress(course)
 
     def perform_update(self, serializer):
         # Ensure the user owns the course before allowing update
         note = self.get_object()
         if note.chapter.course.owner != self.request.user:
             raise PermissionError("You do not have permission to update this note.")
-        serializer.save()
+        
+        # Get the progress value from the request data
+        progress = self.request.data.get('progress')
+        
+        # Print debug information
+        print(f"Updating note {note.id} with progress: {progress}")
+        print(f"Request data: {self.request.data}")
+        
+        # If we're updating progress, make sure it's preserved
+        if progress is not None:
+            serializer.save(progress=progress)
+        else:
+            # If we're not updating progress, preserve the existing progress value
+            serializer.save(progress=note.progress)
+        
+        # Update course progress
+        self.update_course_progress(note.chapter.course)
+
+    def update_course_progress(self, course):
+        # Get all chapters for the course
+        chapters = Chapter.objects.filter(course=course)
+        total_chapters = chapters.count()
+        
+        if total_chapters == 0:
+            return
+        
+        # Calculate average progress across all chapters
+        total_progress = 0
+        chapter_count = 0
+        
+        # Print debug information
+        print(f"\nCalculating progress for course {course.id}:")
+        
+        for chapter in chapters:
+            note = Note.objects.filter(chapter=chapter).first()
+            if note:
+                print(f"Chapter {chapter.id} progress: {note.progress}")
+                total_progress += note.progress
+                chapter_count += 1
+        
+        # Calculate overall course progress
+        if chapter_count > 0:
+            course_progress = int(total_progress / chapter_count)
+        else:
+            course_progress = 0
+            
+        print(f"Total progress: {total_progress}")
+        print(f"Chapter count: {chapter_count}")
+        print(f"Course progress: {course_progress}")
+        
+        # Update or create UserCourseProgress
+        progress, _ = UserCourseProgress.objects.get_or_create(
+            user=course.owner,
+            course=course,
+            defaults={'progress': course_progress}
+        )
+        progress.progress = course_progress
+        progress.save()
+        
+        print(f"Updated UserCourseProgress for course {course.id} to {course_progress}%")
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def summarize_text(request):
+    try:
+        text = request.data.get('text', '')
+        chapter_id = request.data.get('chapterId')
+        course_id = request.data.get('courseId')
+        min_length = request.data.get('min_length', 100)
+        max_length = request.data.get('max_length', 300)
+        
+        # First check if we already have a summary
+        course = get_object_or_404(Course, id=course_id, owner=request.user)
+        chapter = get_object_or_404(Chapter, id=chapter_id, course=course)
+        note = Note.objects.filter(chapter=chapter).first()
+        
+        if note and note.summary:
+            return Response({
+                'summary': note.summary,
+                'isExisting': True
+            })
+        
+        # If no existing summary, generate a new one
+        # Remove HTML tags and clean the text
+        soup = BeautifulSoup(text, 'html.parser')
+        clean_text = soup.get_text()
+        # Remove extra whitespace
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        
+        # Initialize the summarization pipeline and tokenizer
+        model_name = "sshleifer/distilbart-cnn-12-6"
+        summarizer = pipeline('summarization', model=model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        
+        # Split text into chunks if it's too long
+        max_chunk_length = 1024  # Maximum tokens per chunk
+        chunks = []
+        words = clean_text.split()
+        current_chunk = []
+        current_length = 0
+        
+        for word in words:
+            word_tokens = len(tokenizer.encode(word))
+            if current_length + word_tokens > max_chunk_length:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [word]
+                current_length = word_tokens
+            else:
+                current_chunk.append(word)
+                current_length += word_tokens
+        
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        
+        # Summarize each chunk and combine
+        summaries = []
+        for chunk in chunks:
+            chunk_summary = summarizer(chunk, 
+                                    min_length=min(len(chunk.split()) // 4, min_length),
+                                    max_length=min(len(chunk.split()) // 2, max_length),
+                                    do_sample=False)[0]['summary_text']
+            summaries.append(chunk_summary)
+        
+        # Combine summaries if there are multiple chunks
+        final_summary = ' '.join(summaries)
+        
+        # If the combined summary is still too long, summarize it again
+        if len(tokenizer.encode(final_summary)) > max_chunk_length:
+            final_summary = summarizer(final_summary,
+                                    min_length=min_length,
+                                    max_length=max_length,
+                                    do_sample=False)[0]['summary_text']
+        
+        # Save the summary
+        if note:
+            note.summary = final_summary
+            note.save()
+        
+        return Response({
+            'summary': final_summary,
+            'isExisting': False
+        })
+    except Exception as e:
+        print(f"Summarization error: {str(e)}")  # Add server-side logging
+        return Response({
+            'error': str(e)
+        }, status=500)

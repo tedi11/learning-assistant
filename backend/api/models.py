@@ -44,8 +44,10 @@ class Chapter(models.Model):
         ordering = ['order', 'created_at']
 
 class Note(models.Model):
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='notes')
+    chapter = models.ForeignKey(Chapter, related_name='notes', on_delete=models.CASCADE)
     content = models.TextField()
+    summary = models.TextField(null=True, blank=True)
+    progress = models.IntegerField(default=0)  # Progress percentage from 0 to 100
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

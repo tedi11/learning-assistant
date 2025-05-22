@@ -15,6 +15,19 @@ interface CourseCardProps {
     onSelect: () => void;
 }
 
+const getProgressColor = (progress: number) => {
+    if (progress === 0) return '#666'; // Gray for not started
+    if (progress < 30) return '#FF4444'; // Red for early progress
+    if (progress < 70) return '#FFBB33'; // Yellow for medium progress
+    return '#00C851'; // Green for good progress
+};
+
+const getProgressText = (progress: number) => {
+    if (progress === 0) return 'Not Started';
+    if (progress === 100) return 'Completed';
+    return `${progress}% Complete`;
+};
+
 export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, isSelected, onSelect }) => {
     return (
         <TouchableOpacity 
@@ -33,8 +46,21 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, onPress, isSelec
                 </Text>
                 {course.progress !== undefined && (
                     <View style={styles.progressContainer}>
-                        <View style={[styles.progressBar, { width: `${course.progress}%` }]} />
-                        <Text style={styles.progressText}>{course.progress}% Complete</Text>
+                        <View 
+                            style={[
+                                styles.progressBar, 
+                                { 
+                                    width: `${course.progress}%`,
+                                    backgroundColor: getProgressColor(course.progress)
+                                }
+                            ]} 
+                        />
+                        <Text style={[
+                            styles.progressText,
+                            course.progress === 0 && styles.progressTextGray
+                        ]}>
+                            {getProgressText(course.progress)}
+                        </Text>
                     </View>
                 )}
             </View>
@@ -90,7 +116,6 @@ const styles = StyleSheet.create({
     },
     progressBar: {
         height: '100%',
-        backgroundColor: '#4CAF50',
         position: 'absolute',
         left: 0,
     },
@@ -102,6 +127,9 @@ const styles = StyleSheet.create({
         color: '#333',
         fontSize: 12,
         fontWeight: 'bold',
+    },
+    progressTextGray: {
+        color: '#666',
     },
     actions: {
         flexDirection: 'row',

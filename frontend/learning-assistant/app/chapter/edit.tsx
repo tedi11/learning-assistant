@@ -42,10 +42,16 @@ export default function EditChapterScreen() {
                 ? `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/notes/${notes[0].id}/`
                 : `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/notes/`;
 
+            // Preserve the existing progress value if updating
+            const existingProgress = notes.length > 0 ? notes[0].progress : 0;
+
             await axios({
                 method,
                 url,
-                data: { content: content.trim() },
+                data: { 
+                    content: content.trim(),
+                    progress: existingProgress // Preserve progress when updating
+                },
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
