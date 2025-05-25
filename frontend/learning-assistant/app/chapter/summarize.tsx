@@ -137,7 +137,7 @@ export default function SummarizeScreen() {
                     courseId,
                     chapterId,
                     min_length: 100,
-                    max_length: 300
+                    max_length: 500
                 },
                 {
                     headers: {

@@ -31,9 +31,9 @@ class Course(models.Model):
         ordering = ['-updated_at']
 
 class Chapter(models.Model):
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='chapters')
+    course = models.ForeignKey(Course, related_name='chapters', on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
-    order = models.IntegerField(default=0)  # For maintaining chapter order
+    order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -41,7 +41,7 @@ class Chapter(models.Model):
         return f"{self.course.title} - {self.title}"
 
     class Meta:
-        ordering = ['order', 'created_at']
+        ordering = ['order', '-updated_at']
 
 class Note(models.Model):
     chapter = models.ForeignKey(Chapter, related_name='notes', on_delete=models.CASCADE)
@@ -77,3 +77,25 @@ class Item(models.Model):
 
     def __str__(self):
         return self.name
+
+class Document(models.Model):
+    title = models.CharField(max_length=200)
+    file = models.FileField(upload_to='documents/')
+    content = models.TextField(blank=True)  # Extracted text from PDF
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, null=True, blank=True)
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    def delete(self, *args, **kwargs):
+        # Delete the associated file
+        if self.file:
+            self.file.delete()
+        super().delete(*args, **kwargs)
+
+    class Meta:
+        ordering = ['-updated_at']

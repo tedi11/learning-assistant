@@ -50,7 +50,8 @@ export default function EditChapterScreen() {
                 url,
                 data: { 
                     content: content.trim(),
-                    progress: existingProgress // Preserve progress when updating
+                    progress: existingProgress, // Preserve progress when updating
+                    summary: null // Clear the summary when content is edited
                 },
                 headers: {
                     'Authorization': `Bearer ${token}`,
