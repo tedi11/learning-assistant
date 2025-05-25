@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note
+from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note, Document
 from .serializers import (
     ItemSerializer, 
     UserRegistrationSerializer,
@@ -16,6 +16,8 @@ from .serializers import (
 from transformers import pipeline, AutoTokenizer
 from bs4 import BeautifulSoup
 import re
+import PyPDF2
+import io
 
 # Create your views here.
 
@@ -195,8 +197,8 @@ def summarize_text(request):
         text = request.data.get('text', '')
         chapter_id = request.data.get('chapterId')
         course_id = request.data.get('courseId')
-        min_length = request.data.get('min_length', 100)
-        max_length = request.data.get('max_length', 300)
+        min_length = request.data.get('min_length', 30)
+        max_new_tokens = request.data.get('max_length', 500)  # We'll use this as max_new_tokens
         
         # First check if we already have a summary
         course = get_object_or_404(Course, id=course_id, owner=request.user)
@@ -246,7 +248,7 @@ def summarize_text(request):
         for chunk in chunks:
             chunk_summary = summarizer(chunk, 
                                     min_length=min(len(chunk.split()) // 4, min_length),
-                                    max_length=min(len(chunk.split()) // 2, max_length),
+                                    max_new_tokens=min(len(chunk.split()) // 2, max_new_tokens),
                                     do_sample=False)[0]['summary_text']
             summaries.append(chunk_summary)
         
@@ -257,7 +259,7 @@ def summarize_text(request):
         if len(tokenizer.encode(final_summary)) > max_chunk_length:
             final_summary = summarizer(final_summary,
                                     min_length=min_length,
-                                    max_length=max_length,
+                                    max_new_tokens=max_new_tokens,
                                     do_sample=False)[0]['summary_text']
         
         # Save the summary
@@ -274,3 +276,92 @@ def summarize_text(request):
         return Response({
             'error': str(e)
         }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_document(request):
+    try:
+        file = request.FILES.get('file')
+        course_id = request.data.get('courseId')
+        chapter_id = request.data.get('chapterId')
+        create_new = request.data.get('createNew', False)
+        new_course_title = request.data.get('newCourseTitle')
+        new_chapter_title = request.data.get('newChapterTitle')
+
+        if not file:
+            return Response({'error': 'No file provided'}, status=400)
+        
+        if not file.name.endswith('.pdf'):
+            return Response({'error': 'Only PDF files are supported'}, status=400)
+
+        # Extract text from PDF
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
+        text_content = ""
+        for page in pdf_reader.pages:
+            text_content += page.extract_text()
+
+        # Create new course if requested
+        if create_new and new_course_title:
+            course = Course.objects.create(
+                title=new_course_title,
+                owner=request.user
+            )
+            chapter = Chapter.objects.create(
+                course=course,
+                title=new_chapter_title or "Chapter 1"
+            )
+        else:
+            course = get_object_or_404(Course, id=course_id, owner=request.user)
+            if chapter_id:
+                chapter = get_object_or_404(Chapter, id=chapter_id, course=course)
+            else:
+                # Create new chapter in existing course
+                chapter = Chapter.objects.create(
+                    course=course,
+                    title=new_chapter_title or "New Chapter"
+                )
+
+        # Create or update note
+        note, created = Note.objects.get_or_create(
+            chapter=chapter,
+            defaults={'content': text_content}
+        )
+        if not created:
+            note.content = text_content
+            note.summary = None  # Clear existing summary
+            note.save()
+
+        # Save the document
+        document = Document.objects.create(
+            title=file.name,
+            file=file,
+            content=text_content,
+            uploaded_by=request.user,
+            course=course,
+            chapter=chapter
+        )
+
+        return Response({
+            'message': 'Document uploaded successfully',
+            'courseId': course.id,
+            'chapterId': chapter.id,
+            'documentId': document.id
+        })
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_documents(request):
+    documents = Document.objects.filter(uploaded_by=request.user).order_by('-created_at')
+    data = [{
+        'id': doc.id,
+        'title': doc.title,
+        'courseId': doc.course.id if doc.course else None,
+        'courseName': doc.course.title if doc.course else None,
+        'chapterId': doc.chapter.id if doc.chapter else None,
+        'chapterName': doc.chapter.title if doc.chapter else None,
+        'created_at': doc.created_at
+    } for doc in documents]
+    return Response(data)

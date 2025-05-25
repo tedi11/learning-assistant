@@ -32,11 +32,13 @@ class UserSerializer(serializers.ModelSerializer):
     courses_count = serializers.SerializerMethodField()
 
     def get_courses_count(self, obj):
-        # Count courses owned by the user
-        owned_courses = obj.courses.count()
-        # Count courses the user is enrolled in
-        enrolled_courses = UserCourseProgress.objects.filter(user=obj).count()
-        return owned_courses + enrolled_courses
+        # Get all courses owned by the user
+        owned_courses = obj.courses.all()
+        # Get courses the user is enrolled in but doesn't own
+        enrolled_courses = UserCourseProgress.objects.exclude(
+            course__owner=obj  # Exclude courses where the user is the owner
+        ).filter(user=obj).count()
+        return owned_courses.count() + enrolled_courses
 
     class Meta:
         model = CustomUser
