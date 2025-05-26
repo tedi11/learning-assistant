@@ -172,6 +172,7 @@ export default function HomeScreen() {
                 <View style={styles.hintContainer}>
                     <Text style={styles.hintText}>
                         Tip: Long press on a course to select it for deletion
+                        
                     </Text>
                 </View>
             )}
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
-        marginBottom: 75,
+        marginBottom: 32,
     },
     scrollContent: {
         paddingVertical: 8,
@@ -271,13 +272,9 @@ const styles = StyleSheet.create({
     },
     hintContainer: {
         position: 'absolute',
-        bottom: 85,
+        bottom: 10,
         left: 0,
         right: 0,
-        backgroundColor: 'rgba(245, 245, 245, 0.95)',
-        paddingVertical: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#e0e0e0',
     },
     hintText: {
         fontSize: 12,
