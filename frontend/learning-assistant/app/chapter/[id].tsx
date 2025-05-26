@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, SafeAreaView, RefreshControl, TouchableOpacity, Alert, useWindowDimensions, Modal, Pressable, Platform } from 'react-native';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, SafeAreaView, RefreshControl, TouchableOpacity, Alert, useWindowDimensions, Modal, Pressable, Platform, Image } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import RenderHtml from 'react-native-render-html';
@@ -16,6 +16,14 @@ interface Note {
     progress: number;
     created_at: string;
     updated_at: string;
+}
+
+interface Attachment {
+    id: number;
+    url: string;
+    page_number: number;
+    original_name: string;
+    created_at: string;
 }
 
 interface Chapter {
@@ -172,6 +180,12 @@ export default function ChapterScreen() {
     const [showProgressModal, setShowProgressModal] = useState(false);
     const [showZoomModal, setShowZoomModal] = useState(false);
     const [textScale, setTextScale] = useState(1);
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [documentId, setDocumentId] = useState<number | null>(null);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [contentChunkIndex, setContentChunkIndex] = useState(0);
+    const CHUNK_SIZE = 2000; // Show 2000 characters per chunk
 
     const fetchChapter = useCallback(async () => {
         try {
@@ -187,6 +201,21 @@ export default function ChapterScreen() {
                 }
             });
             setChapter(response.data);
+
+            // Fetch the document ID for this chapter
+            const documentsResponse = await axios.get(`http://192.168.1.135:8000/api/documents/`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            const chapterDocument = documentsResponse.data.find(
+                (doc: any) => doc.chapterId === Number(id)
+            );
+            
+            if (chapterDocument) {
+                setDocumentId(chapterDocument.id);
+            }
         } catch (error) {
             console.error('Error fetching chapter:', error);
             if (axios.isAxiosError(error)) {
@@ -211,6 +240,24 @@ export default function ChapterScreen() {
         fetchChapter();
     }, [fetchChapter]);
 
+    const fetchAttachments = useCallback(async () => {
+        try {
+            if (!documentId) return;
+            
+            const token = await authService.getToken();
+            if (!token) return;
+
+            const response = await axios.get(`http://192.168.1.135:8000/api/documents/${documentId}/attachments/`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            setAttachments(response.data);
+        } catch (error) {
+            console.error('Error fetching attachments:', error);
+        }
+    }, [documentId]);
+
     useFocusEffect(
         useCallback(() => {
             if (id && courseId) {
@@ -218,6 +265,12 @@ export default function ChapterScreen() {
             }
         }, [id, courseId])
     );
+
+    useEffect(() => {
+        if (documentId) {
+            fetchAttachments();
+        }
+    }, [documentId, fetchAttachments]);
 
     const handleProgressSave = useCallback(async (newProgress: number) => {
         try {
@@ -257,6 +310,75 @@ export default function ChapterScreen() {
             Alert.alert('Error', 'Failed to update progress. Please try again.');
         }
     }, [chapter, courseId, id, router]);
+
+    // Function to split content into chunks
+    const getContentChunks = useCallback((htmlContent: string) => {
+        const closingTags = ['</p>', '</h1>', '</h2>', '</h3>', '</div>'];
+        const chunks = [];
+        let remainingContent = htmlContent;
+        
+        while (remainingContent.length > 0) {
+            if (remainingContent.length <= CHUNK_SIZE) {
+                chunks.push(remainingContent);
+                break;
+            }
+
+            let chunk = remainingContent.substring(0, CHUNK_SIZE);
+            let cutoffPoint = 0;
+            
+            // Find the last complete tag in this chunk
+            let lastCompleteTag = -1;
+            for (const tag of closingTags) {
+                const lastIndex = chunk.lastIndexOf(tag);
+                if (lastIndex > lastCompleteTag) {
+                    lastCompleteTag = lastIndex;
+                    cutoffPoint = lastIndex + tag.length;
+                }
+            }
+            
+            if (lastCompleteTag === -1) {
+                // If no complete tag found, cut at the last space
+                const lastSpace = chunk.lastIndexOf(' ');
+                cutoffPoint = lastSpace > 0 ? lastSpace : CHUNK_SIZE;
+            }
+            
+            chunks.push(remainingContent.substring(0, cutoffPoint));
+            remainingContent = remainingContent.substring(cutoffPoint);
+        }
+        
+        return chunks;
+    }, []);
+
+    // Function to get current visible content
+    const getVisibleContent = useCallback((htmlContent: string) => {
+        const chunks = getContentChunks(htmlContent);
+        return chunks.slice(0, contentChunkIndex + 1).join('');
+    }, [contentChunkIndex, getContentChunks]);
+
+    // Function to check if there's more content
+    const hasMoreContent = useCallback((htmlContent: string) => {
+        const chunks = getContentChunks(htmlContent);
+        return contentChunkIndex < chunks.length - 1;
+    }, [contentChunkIndex, getContentChunks]);
+
+    // Function to handle See More/Less
+    const handleSeeMore = useCallback(() => {
+        setContentChunkIndex(prev => prev + 1);
+    }, []);
+
+    const handleSeeLess = useCallback(() => {
+        setContentChunkIndex(prev => Math.max(0, prev - 1));
+    }, []);
+
+    // Function to handle See All/Hide All
+    const handleSeeAll = useCallback((htmlContent: string) => {
+        const chunks = getContentChunks(htmlContent);
+        setContentChunkIndex(chunks.length - 1);
+    }, [getContentChunks]);
+
+    const handleHideAll = useCallback(() => {
+        setContentChunkIndex(0);
+    }, []);
 
     const ChapterOptions = () => (
         <Modal
@@ -330,6 +452,32 @@ export default function ChapterScreen() {
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
+        </Modal>
+    );
+
+    const ImagePreviewModal = () => (
+        <Modal
+            visible={!!selectedImage}
+            transparent={true}
+            onRequestClose={() => setSelectedImage(null)}
+        >
+            <View style={styles.imagePreviewOverlay}>
+                <TouchableOpacity
+                    style={styles.imagePreviewCloseButton}
+                    onPress={() => setSelectedImage(null)}
+                >
+                    <View style={styles.closeButtonContainer}>
+                        <Ionicons name="close-circle" size={32} color="#fff" />
+                    </View>
+                </TouchableOpacity>
+                {selectedImage && (
+                    <Image
+                        source={{ uri: selectedImage }}
+                        style={styles.imagePreview}
+                        resizeMode="contain"
+                    />
+                )}
+            </View>
         </Modal>
     );
 
@@ -434,117 +582,204 @@ export default function ChapterScreen() {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    chapter.notes.map(note => (
-                        <View 
-                            key={note.id} 
-                            style={styles.noteContainer}
-                        >
-                            <Text style={styles.lastUpdated}>
-                                Last updated: {new Date(note.updated_at).toLocaleString(undefined, {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
-                            </Text>
-                            <RenderHtml
-                                contentWidth={width}
-                                source={{ html: note.content }}
-                                tagsStyles={{
-                                    h1: {
-                                        fontSize: 28 * textScale,
-                                        fontWeight: 'bold',
-                                        color: '#333',
-                                        marginVertical: 16,
-                                    },
-                                    h2: {
-                                        fontSize: 24 * textScale,
-                                        fontWeight: 'bold',
-                                        color: '#333',
-                                        marginVertical: 12,
-                                    },
-                                    h3: {
-                                        fontSize: 20 * textScale,
-                                        fontWeight: 'bold',
-                                        color: '#333',
-                                        marginVertical: 8,
-                                    },
-                                    p: {
-                                        fontSize: 16 * textScale,
-                                        color: '#333',
-                                        lineHeight: 24 * textScale,
-                                        marginVertical: 8,
-                                    },
-                                    ul: {
-                                        marginLeft: 20,
-                                    },
-                                    ol: {
-                                        marginLeft: 20,
-                                    },
-                                    li: {
-                                        fontSize: 16 * textScale,
-                                        color: '#333',
-                                        lineHeight: 24 * textScale,
-                                    },
-                                    strong: {
-                                        fontWeight: 'bold',
-                                    },
-                                    b: {
-                                        fontWeight: 'bold',
-                                    },
-                                    em: {
-                                        fontStyle: 'italic',
-                                    },
-                                    i: {
-                                        fontStyle: 'italic',
-                                    },
-                                    u: {
-                                        textDecorationLine: 'underline',
-                                    },
-                                    strike: {
-                                        textDecorationLine: 'line-through',
-                                    },
-                                    a: {
-                                        color: '#007AFF',
-                                        textDecorationLine: 'underline',
-                                        fontSize: 16 * textScale,
-                                    },
-                                    blockquote: {
-                                        borderLeftWidth: 4,
-                                        borderLeftColor: '#666',
-                                        paddingLeft: 16,
-                                        marginLeft: 0,
-                                        fontStyle: 'italic',
-                                        fontSize: 16 * textScale,
-                                    },
-                                    code: {
-                                        fontFamily: 'monospace',
-                                        backgroundColor: '#f5f5f5',
-                                        padding: 4,
-                                        borderRadius: 4,
-                                        fontSize: 14 * textScale,
-                                    },
-                                    pre: {
-                                        backgroundColor: '#f5f5f5',
-                                        padding: 8,
-                                        borderRadius: 4,
-                                        marginVertical: 8,
-                                        fontSize: 14 * textScale,
-                                    }
-                                }}
-                                enableExperimentalBRCollapsing={true}
-                                enableExperimentalGhostLinesPrevention={true}
-                                baseStyle={{
-                                    color: '#333',
-                                    fontSize: 16 * textScale,
-                                    lineHeight: 24 * textScale,
-                                }}
-                            />
-                        </View>
-                    ))
+                    <>
+                        {chapter.notes.map(note => {
+                            const visibleContent = getVisibleContent(note.content);
+                            const chunks = getContentChunks(note.content);
+                            const showMore = hasMoreContent(note.content);
+                            const showLess = contentChunkIndex > 0;
+                            const isShowingAll = contentChunkIndex === chunks.length - 1;
+                            const isShowingFirst = contentChunkIndex === 0;
+
+                            return (
+                                <View 
+                                    key={note.id} 
+                                    style={styles.noteContainer}
+                                >
+                                    <Text style={styles.lastUpdated}>
+                                        Last updated: {new Date(note.updated_at).toLocaleString(undefined, {
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </Text>
+                                    <RenderHtml
+                                        contentWidth={width}
+                                        source={{ html: visibleContent }}
+                                        tagsStyles={{
+                                            div: {
+                                                marginVertical: 8,
+                                            },
+                                            'div.pdf-content': {
+                                                paddingHorizontal: 16,
+                                            },
+                                            h1: {
+                                                fontSize: 28 * textScale,
+                                                fontWeight: 'bold',
+                                                color: '#333',
+                                                marginVertical: 24,
+                                                marginTop: 32,
+                                            },
+                                            h2: {
+                                                fontSize: 24 * textScale,
+                                                fontWeight: 'bold',
+                                                color: '#333',
+                                                marginVertical: 20,
+                                                marginTop: 28,
+                                            },
+                                            h3: {
+                                                fontSize: 20 * textScale,
+                                                fontWeight: 'bold',
+                                                color: '#333',
+                                                marginVertical: 16,
+                                                marginTop: 24,
+                                            },
+                                            p: {
+                                                fontSize: 16 * textScale,
+                                                color: '#333',
+                                                lineHeight: 24 * textScale,
+                                                marginVertical: 0,
+                                                textAlign: 'justify',
+                                                paddingVertical: 2,
+                                            },
+                                            ul: {
+                                                marginLeft: 20,
+                                                marginVertical: 8,
+                                            },
+                                            ol: {
+                                                marginLeft: 20,
+                                                marginVertical: 8,
+                                            },
+                                            li: {
+                                                fontSize: 16 * textScale,
+                                                color: '#333',
+                                                lineHeight: 24 * textScale,
+                                                marginVertical: 2,
+                                            },
+                                            strong: {
+                                                fontWeight: 'bold',
+                                                color: '#222',
+                                            },
+                                            pre: {
+                                                backgroundColor: '#f5f5f5',
+                                                padding: 16,
+                                                borderRadius: 8,
+                                                marginVertical: 12,
+                                                fontSize: 14 * textScale,
+                                            },
+                                            img: {
+                                                borderRadius: 8,
+                                                marginVertical: 16,
+                                            }
+                                        }}
+                                        enableExperimentalBRCollapsing={true}
+                                        enableExperimentalGhostLinesPrevention={true}
+                                        baseStyle={{
+                                            color: '#333',
+                                            fontSize: 16 * textScale,
+                                            lineHeight: 24 * textScale,
+                                            fontFamily: Platform.select({
+                                                ios: 'System',
+                                                android: 'Roboto'
+                                            }),
+                                        }}
+                                        classesStyles={{
+                                            'pdf-content': {
+                                                backgroundColor: '#ffffff',
+                                                borderRadius: 12,
+                                                padding: 20,
+                                                shadowColor: '#000',
+                                                shadowOffset: {
+                                                    width: 0,
+                                                    height: 2,
+                                                },
+                                                shadowOpacity: 0.1,
+                                                shadowRadius: 4,
+                                                elevation: 3,
+                                            }
+                                        }}
+                                    />
+                                    <View style={styles.contentNavigation}>
+                                        <View style={styles.navigationRow}>
+                                            {showLess && (
+                                                <TouchableOpacity
+                                                    style={[styles.navigationButton, styles.seeLessButton]}
+                                                    onPress={handleSeeLess}
+                                                >
+                                                    <Ionicons name="chevron-up" size={20} color="#007AFF" />
+                                                    <Text style={styles.navigationButtonText}>See Less</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            {showMore && (
+                                                <TouchableOpacity
+                                                    style={[styles.navigationButton, styles.seeMoreButton]}
+                                                    onPress={handleSeeMore}
+                                                >
+                                                    <Text style={styles.navigationButtonText}>See More</Text>
+                                                    <Ionicons name="chevron-down" size={20} color="#007AFF" />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                        <View style={styles.navigationRow}>
+                                            {!isShowingAll && chunks.length > 1 && (
+                                                <TouchableOpacity
+                                                    style={[styles.navigationButton, styles.seeAllButton]}
+                                                    onPress={() => handleSeeAll(note.content)}
+                                                >
+                                                    <Ionicons name="expand" size={20} color="#007AFF" />
+                                                    <Text style={styles.navigationButtonText}>See All</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                            {!isShowingFirst && (
+                                                <TouchableOpacity
+                                                    style={[styles.navigationButton, styles.hideAllButton]}
+                                                    onPress={handleHideAll}
+                                                >
+                                                    <Ionicons name="contract" size={20} color="#007AFF" />
+                                                    <Text style={styles.navigationButtonText}>Hide All</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                        
+                        {attachments.length > 0 && (
+                            <View style={styles.attachmentsContainer}>
+                                <Text style={styles.attachmentsTitle}>
+                                    Attachments ({attachments.length})
+                                </Text>
+                                <ScrollView 
+                                    horizontal 
+                                    showsHorizontalScrollIndicator={false}
+                                    style={styles.attachmentsScroll}
+                                >
+                                    {attachments.map((attachment) => (
+                                        <TouchableOpacity
+                                            key={attachment.id}
+                                            style={styles.attachmentItem}
+                                            onPress={() => setSelectedImage(attachment.url)}
+                                        >
+                                            <Image
+                                                source={{ uri: attachment.url }}
+                                                style={styles.attachmentThumbnail}
+                                            />
+                                            <Text style={styles.attachmentPage}>
+                                                Page {attachment.page_number}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </>
                 )}
             </ScrollView>
+            
+            <ImagePreviewModal />
             <CustomTabBar />
         </SafeAreaView>
     );
@@ -754,5 +989,101 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
-    }
+    },
+    attachmentsContainer: {
+        marginTop: 20,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    attachmentsTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 12,
+    },
+    attachmentsScroll: {
+        flexGrow: 0,
+    },
+    attachmentItem: {
+        marginRight: 12,
+        alignItems: 'center',
+    },
+    attachmentThumbnail: {
+        width: 120,
+        height: 160,
+        borderRadius: 8,
+        backgroundColor: '#f5f5f5',
+    },
+    attachmentPage: {
+        fontSize: 12,
+        color: '#666',
+        marginTop: 4,
+    },
+    imagePreviewOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imagePreviewCloseButton: {
+        position: 'absolute',
+        top: '15%',
+        right: 20,
+        zIndex: 1,
+        padding: 8,
+    },
+    closeButtonContainer: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imagePreview: {
+        width: '100%',
+        height: '80%',
+    },
+    contentNavigation: {
+        marginTop: 16,
+        gap: 12,
+    },
+    navigationRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 16,
+    },
+    navigationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        backgroundColor: '#f8f8f8',
+        minWidth: 120,
+        justifyContent: 'center',
+    },
+    seeLessButton: {
+        backgroundColor: '#f0f0f0',
+    },
+    seeMoreButton: {
+        backgroundColor: '#f0f0f0',
+    },
+    seeAllButton: {
+        backgroundColor: '#e8f0ff',
+    },
+    hideAllButton: {
+        backgroundColor: '#fff0f0',
+    },
+    navigationButtonText: {
+        color: '#007AFF',
+        fontSize: 16,
+        fontWeight: '500',
+        marginHorizontal: 4,
+    },
 }); 

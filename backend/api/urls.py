@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
 from .views import (
     ItemViewSet, RegisterView, UserProfileView, CourseViewSet, 
     ChapterViewSet, NoteViewSet, summarize_text, upload_document,
-    get_documents
+    get_documents, get_document_attachments, ask_question
 )
 
 router = DefaultRouter()
@@ -34,4 +34,6 @@ urlpatterns = [
     path('summarize/', summarize_text, name='summarize-text'),
     path('documents/upload/', upload_document, name='upload-document'),
     path('documents/', get_documents, name='get-documents'),
+    path('documents/<int:document_id>/attachments/', get_document_attachments, name='get-document-attachments'),
+    path('ask-question/', ask_question, name='ask-question'),
 ] 

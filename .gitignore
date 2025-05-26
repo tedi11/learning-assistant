@@ -27,4 +27,14 @@ web-build/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Media and Uploads
+backend/media/documents/
+backend/media/pdf_attachments/
+backend/media/profile_pics/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.gif 

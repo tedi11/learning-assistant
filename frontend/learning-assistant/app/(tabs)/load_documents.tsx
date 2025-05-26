@@ -312,12 +312,61 @@ export default function LoadDocumentsScreen() {
                 }
             }
 
-            await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
+            const response = await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'multipart/form-data',
                 }
             });
+
+            // Check if we received a warning about existing document
+            if (response.data.requiresConfirmation) {
+                setLoading(false);
+                Alert.alert(
+                    'Warning',
+                    'A document already exists for this chapter. Do you want to replace it?',
+                    [
+                        {
+                            text: 'Cancel',
+                            style: 'cancel',
+                            onPress: () => {
+                                setShowCourseModal(false);
+                                setSelectedFile(null);
+                            }
+                        },
+                        {
+                            text: 'Replace',
+                            style: 'destructive',
+                            onPress: async () => {
+                                setLoading(true);
+                                try {
+                                    // Add forceUpload flag to formData
+                                    formData.append('forceUpload', 'true');
+                                    
+                                    // Retry the upload with force flag
+                                    await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`,
+                                            'Content-Type': 'multipart/form-data',
+                                        }
+                                    });
+
+                                    setShowCourseModal(false);
+                                    setSelectedFile(null);
+                                    fetchDocuments();
+                                    Alert.alert('Success', 'Document uploaded successfully');
+                                } catch (error) {
+                                    console.error('Error uploading document:', error);
+                                    Alert.alert('Error', 'Failed to upload document');
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }
+                        }
+                    ]
+                );
+                return;
+            }
 
             setShowCourseModal(false);
             setSelectedFile(null);

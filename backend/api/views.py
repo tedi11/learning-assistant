@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note, Document
+from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note, Document, PDFAttachment
 from .serializers import (
     ItemSerializer, 
     UserRegistrationSerializer,
@@ -18,6 +18,20 @@ from bs4 import BeautifulSoup
 import re
 import PyPDF2
 import io
+from django.core.files.base import ContentFile
+import fitz  # PyMuPDF
+import os
+from django.core.cache import cache
+from django.utils.crypto import get_random_string
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEndpoint
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
+from typing import Iterable
+from langchain_core.documents import Document as LCDocument
 
 # Create your views here.
 
@@ -287,6 +301,7 @@ def upload_document(request):
         create_new = request.data.get('createNew', False)
         new_course_title = request.data.get('newCourseTitle')
         new_chapter_title = request.data.get('newChapterTitle')
+        force_upload = request.data.get('forceUpload', False)
 
         if not file:
             return Response({'error': 'No file provided'}, status=400)
@@ -294,11 +309,18 @@ def upload_document(request):
         if not file.name.endswith('.pdf'):
             return Response({'error': 'Only PDF files are supported'}, status=400)
 
-        # Extract text from PDF
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
-        text_content = ""
-        for page in pdf_reader.pages:
-            text_content += page.extract_text()
+        # Generate a cache key based on file content
+        file_content = file.read()
+        cache_key = f"pdf_content_{get_random_string(32)}"
+        
+        # Try to get cached content
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            final_html, image_info = cached_data
+        else:
+            # Process the PDF and cache the results
+            final_html, image_info = process_pdf(file_content)
+            cache.set(cache_key, (final_html, image_info), timeout=3600)  # Cache for 1 hour
 
         # Create new course if requested
         if create_new and new_course_title:
@@ -315,41 +337,192 @@ def upload_document(request):
             if chapter_id:
                 chapter = get_object_or_404(Chapter, id=chapter_id, course=course)
             else:
-                # Create new chapter in existing course
                 chapter = Chapter.objects.create(
                     course=course,
                     title=new_chapter_title or "New Chapter"
                 )
 
+        # Check for existing document
+        existing_document = Document.objects.filter(
+            chapter=chapter,
+            uploaded_by=request.user
+        ).first()
+
+        if existing_document and not force_upload:
+            return Response({
+                'warning': 'Document already exists for this chapter',
+                'requiresConfirmation': True,
+                'existingDocument': {
+                    'id': existing_document.id,
+                    'title': existing_document.title,
+                    'created_at': existing_document.created_at
+                }
+            }, status=200)
+
         # Create or update note
         note, created = Note.objects.get_or_create(
             chapter=chapter,
-            defaults={'content': text_content}
+            defaults={'content': final_html}
         )
         if not created:
-            note.content = text_content
+            note.content = final_html
             note.summary = None  # Clear existing summary
             note.save()
 
-        # Save the document
+        # Delete existing document and its attachments if it exists
+        if existing_document:
+            existing_document.delete()
+
+        # Save the new document
         document = Document.objects.create(
             title=file.name,
-            file=file,
-            content=text_content,
+            file=ContentFile(file_content, name=file.name),
+            content=final_html,
             uploaded_by=request.user,
             course=course,
             chapter=chapter
         )
 
+        # Save the extracted images
+        image_count = 0
+        for img_data in image_info:
+            try:
+                attachment = PDFAttachment(
+                    document=document,
+                    page_number=img_data['page_number'],
+                    original_name=img_data['filename']
+                )
+                attachment.file.save(
+                    img_data['filename'],
+                    ContentFile(img_data['image_bytes']),
+                    save=True
+                )
+                image_count += 1
+            except Exception as e:
+                print(f"Error saving image: {str(e)}")
+                continue
+
         return Response({
             'message': 'Document uploaded successfully',
             'courseId': course.id,
             'chapterId': chapter.id,
-            'documentId': document.id
+            'documentId': document.id,
+            'imageCount': image_count
         })
 
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+def process_pdf(file_content):
+    """Process PDF content and return HTML and image information."""
+    pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+    html_content = []
+    current_font_size = None
+    current_font_weight = None
+    in_paragraph = False
+    last_y = None
+    last_text = ""
+    max_pages = 50
+
+    # Extract text
+    for page_num, page in enumerate(pdf_reader.pages):
+        if page_num >= max_pages:
+            html_content.append("<p>[Document truncated due to length. Only first 50 pages are shown.]</p>")
+            break
+
+        page_text = ""
+        
+        def visitor_body(text, cm, tm, font_dict, font_size):
+            nonlocal page_text, current_font_size, current_font_weight, in_paragraph, last_y, last_text
+            
+            if len(text.strip()) == 0:
+                return
+
+            # Extract font properties
+            font_name = font_dict.get('/BaseFont', '').lower() if font_dict else ''
+            is_bold = 'bold' in font_name or 'black' in font_name
+            
+            if current_font_size is None:
+                current_font_size = font_size
+            
+            is_heading = font_size > current_font_size + 2
+            current_y = tm[5] if tm else 0
+
+            if last_y is not None:
+                y_diff = abs(current_y - last_y)
+                if (y_diff > 15 or is_heading) and in_paragraph:
+                    page_text += "</p>\n"
+                    in_paragraph = False
+                elif y_diff <= 12 and in_paragraph and not text.startswith(' ') and not last_text.endswith(' '):
+                    page_text += " "
+
+            if not in_paragraph:
+                if is_heading:
+                    heading_level = min(3, max(1, int(6 * (current_font_size / font_size))))
+                    page_text += f"\n<h{heading_level}>"
+                    page_text += text
+                    page_text += f"</h{heading_level}>\n"
+                else:
+                    page_text += "\n<p>"
+                    page_text += text
+                    in_paragraph = True
+            else:
+                if is_bold:
+                    page_text += f"<strong>{text}</strong>"
+                else:
+                    page_text += text
+
+            last_y = current_y
+            last_text = text
+            current_font_size = font_size
+
+        page.extract_text(visitor_text=visitor_body)
+        if in_paragraph:
+            page_text += "</p>\n"
+            in_paragraph = False
+        
+        html_content.append(page_text)
+
+    final_html = f"<div class='pdf-content'>\n{''.join(html_content)}</div>"
+
+    # Extract images
+    image_info = []
+    max_images = 20
+    min_size = 100
+
+    pdf_document = fitz.open(stream=file_content, filetype="pdf")
+    
+    for page_num in range(pdf_document.page_count):
+        if len(image_info) >= max_images:
+            break
+            
+        page = pdf_document[page_num]
+        image_list = page.get_images()
+        
+        for img_index, img in enumerate(image_list):
+            if len(image_info) >= max_images:
+                break
+                
+            try:
+                xref = img[0]
+                base_image = pdf_document.extract_image(xref)
+                
+                if base_image.get("width", 0) < min_size or base_image.get("height", 0) < min_size:
+                    continue
+                
+                image_filename = f"page_{page_num + 1}_image_{img_index + 1}.{base_image['ext']}"
+                
+                image_info.append({
+                    'filename': image_filename,
+                    'image_bytes': base_image["image"],
+                    'page_number': page_num + 1
+                })
+            except Exception as e:
+                print(f"Error extracting image: {str(e)}")
+                continue
+
+    pdf_document.close()
+    return final_html, image_info
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -365,3 +538,129 @@ def get_documents(request):
         'created_at': doc.created_at
     } for doc in documents]
     return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_document_attachments(request, document_id):
+    try:
+        # First check if the document exists and belongs to the user
+        try:
+            document = Document.objects.get(id=document_id, uploaded_by=request.user)
+        except Document.DoesNotExist:
+            return Response({
+                'error': 'Document not found or you do not have permission to access it'
+            }, status=404)
+
+        # Get all attachments for this document
+        attachments = PDFAttachment.objects.filter(document=document).order_by('page_number')
+        
+        if not attachments:
+            return Response([])  # Return empty list if no attachments
+        
+        # Build the response data
+        data = [{
+            'id': attachment.id,
+            'url': request.build_absolute_uri(attachment.file.url),
+            'page_number': attachment.page_number,
+            'original_name': attachment.original_name,
+            'created_at': attachment.created_at
+        } for attachment in attachments]
+        
+        return Response(data)
+        
+    except Exception as e:
+        print(f"Error in get_document_attachments: {str(e)}")  # Log the error
+        return Response({
+            'error': 'An error occurred while fetching attachments'
+        }, status=500)
+
+# Initialize embeddings model
+HF_EMBED_MODEL_ID = "BAAI/bge-small-en-v1.5"
+embeddings = HuggingFaceEmbeddings(model_name=HF_EMBED_MODEL_ID)
+
+# Initialize LLM
+HF_API_KEY = os.environ.get("HF_API_KEY")
+HF_LLM_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
+
+llm = HuggingFaceEndpoint(
+    repo_id=HF_LLM_MODEL_ID,
+    huggingfacehub_api_token=HF_API_KEY,
+)
+
+def format_docs(docs: Iterable[LCDocument]):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+# Initialize text splitter
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=200,
+)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ask_question(request):
+    try:
+        question = request.data.get('question')
+        chapter_id = request.data.get('chapterId')
+        
+        if not question or not chapter_id:
+            return Response({
+                'error': 'Question and chapter ID are required'
+            }, status=400)
+
+        # Get the chapter content
+        chapter = get_object_or_404(Chapter, id=chapter_id)
+        note = Note.objects.filter(chapter=chapter).first()
+        
+        if not note:
+            return Response({
+                'error': 'No content found for this chapter'
+            }, status=404)
+
+        # Get document if exists
+        document = Document.objects.filter(chapter=chapter).first()
+        
+        # Prepare the content for RAG
+        content = note.content
+        if document:
+            content += "\n\n" + document.content
+
+        # Clean HTML content
+        soup = BeautifulSoup(content, 'html.parser')
+        clean_text = soup.get_text()
+
+        # Create document splits
+        docs = [LCDocument(page_content=clean_text)]
+        splits = text_splitter.split_documents(docs)
+
+        # Create vector store using FAISS
+        vectorstore = FAISS.from_documents(splits, embeddings)
+
+        # Create retriever
+        retriever = vectorstore.as_retriever()
+
+        # Create prompt template
+        prompt = PromptTemplate.from_template(
+            "Context information is below.\n---------------------\n{context}\n---------------------\nGiven the context information and not prior knowledge, answer the query.\nQuery: {question}\nAnswer:\n"
+        )
+
+        # Create RAG chain
+        rag_chain = (
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
+        )
+
+        # Get answer
+        answer = rag_chain.invoke(question)
+
+        return Response({
+            'answer': answer
+        })
+
+    except Exception as e:
+        print(f"Error in ask_question: {str(e)}")
+        return Response({
+            'error': 'An error occurred while processing your question'
+        }, status=500)

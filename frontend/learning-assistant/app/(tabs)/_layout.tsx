@@ -19,7 +19,7 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="chatbot"
+                    name="assistant"
                     options={{
                         title: 'Assistant',
                     }}

@@ -1,68 +1,71 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { usePathname, useRouter } from 'expo-router';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Text } from '@/components/ui';
+import { Colors } from '@/constants/Colors';
 
-type TabPath = '/(tabs)' | '/(tabs)/profile' | '/(tabs)/chatbot' | '/(tabs)/load_documents';
-type TabIconName = 'home-outline' | 'home' | 'person-outline' | 'person' | 'chatbubble-outline' | 'chatbubble' | 'document-outline' | 'document';
+type TabIconName = 'home-outline' | 'home' | 'chatbubble-outline' | 'chatbubble' | 'document-text-outline' | 'document-text' | 'person-outline' | 'person';
 
 interface Tab {
     name: string;
-    path: TabPath;
     icon: TabIconName;
     activeIcon: TabIconName;
+    route: string;
 }
 
 export function CustomTabBar() {
-    const pathname = usePathname();
     const router = useRouter();
+    const pathname = usePathname();
 
     const tabs: Tab[] = [
         {
             name: 'Home',
-            path: '/(tabs)',
             icon: 'home-outline',
-            activeIcon: 'home'
+            activeIcon: 'home',
+            route: '/(tabs)',
         },
         {
             name: 'Assistant',
-            path: '/(tabs)/chatbot',
             icon: 'chatbubble-outline',
-            activeIcon: 'chatbubble'
+            activeIcon: 'chatbubble',
+            route: '/(tabs)/assistant',
         },
         {
             name: 'Documents',
-            path: '/(tabs)/load_documents',
-            icon: 'document-outline',
-            activeIcon: 'document'
+            icon: 'document-text-outline',
+            activeIcon: 'document-text',
+            route: '/(tabs)/load_documents',
         },
         {
             name: 'Profile',
-            path: '/(tabs)/profile',
             icon: 'person-outline',
-            activeIcon: 'person'
-        }
+            activeIcon: 'person',
+            route: '/(tabs)/profile',
+        },
     ];
 
     return (
         <View style={styles.container}>
             {tabs.map((tab) => {
-                const isActive = pathname === tab.path;
+                const isActive = pathname.startsWith(tab.route);
                 return (
                     <TouchableOpacity
-                        key={tab.path}
+                        key={tab.name}
                         style={styles.tab}
-                        onPress={() => router.push(tab.path)}
+                        onPress={() => router.push(tab.route as any)}
                     >
                         <Ionicons
                             name={isActive ? tab.activeIcon : tab.icon}
                             size={24}
-                            color={isActive ? '#007AFF' : '#666'}
+                            color={isActive ? Colors.light.primary : Colors.light.gray}
                         />
-                        <Text style={[
-                            styles.tabText,
-                            isActive && styles.activeTabText
-                        ]}>
+                        <Text
+                            style={[
+                                styles.tabText,
+                                isActive && styles.activeTabText,
+                            ]}
+                        >
                             {tab.name}
                         </Text>
                     </TouchableOpacity>
@@ -78,23 +81,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#e0e0e0',
-        paddingBottom: Platform.OS === 'ios' ? 20 : 0,
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
+        paddingBottom: 20, // Add extra padding for home indicator
+        paddingTop: 8,
     },
     tab: {
         flex: 1,
         alignItems: 'center',
-        paddingVertical: 8,
+        justifyContent: 'center',
     },
     tabText: {
         fontSize: 12,
-        color: '#666',
         marginTop: 4,
+        color: Colors.light.gray,
     },
     activeTabText: {
-        color: '#007AFF',
+        color: Colors.light.primary,
     },
 }); 

@@ -99,3 +99,22 @@ class Document(models.Model):
 
     class Meta:
         ordering = ['-updated_at']
+
+class PDFAttachment(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='attachments')
+    file = models.ImageField(upload_to='pdf_attachments/')
+    page_number = models.IntegerField()
+    original_name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Attachment from {self.document.title} - Page {self.page_number}"
+
+    def delete(self, *args, **kwargs):
+        # Delete the associated file
+        if self.file:
+            self.file.delete()
+        super().delete(*args, **kwargs)
+
+    class Meta:
+        ordering = ['page_number', 'created_at']

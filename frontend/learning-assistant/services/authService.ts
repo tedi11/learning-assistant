@@ -6,8 +6,10 @@ import { Platform } from 'react-native';
 const getApiUrl = () => {
     if (Platform.OS === 'android') {
         return 'http://10.0.2.2:8000/api'; // Android emulator
+    } else if (Platform.OS === 'ios') {
+        return 'http://192.168.1.135:8000/api'; // iOS simulator
     } else {
-        return 'http://192.168.1.135:8000/api'; // Your computer's IP address
+        return 'http://192.168.1.135:8000/api'; // Web/desktop
     }
 };
 
@@ -26,6 +28,8 @@ interface UserProfile {
     last_name: string;
     bio?: string;
     profile_picture?: string;
+    date_joined: string;
+    courses_count: number;
 }
 
 class AuthService {
@@ -36,7 +40,7 @@ class AuthService {
                 email,
                 password,
             }, {
-                timeout: 10000, // 10 second timeout
+                timeout: 30000, // 30 second timeout
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
@@ -44,7 +48,7 @@ class AuthService {
             });
 
             if (response.data.access) {
-                await AsyncStorage.setItem('userToken', response.data.access);
+                await AsyncStorage.setItem('token', response.data.access);
                 await AsyncStorage.setItem('refreshToken', response.data.refresh);
                 return response.data;
             } else {
@@ -73,12 +77,12 @@ class AuthService {
     }
 
     async logout() {
-        await AsyncStorage.removeItem('userToken');
+        await AsyncStorage.removeItem('token');
         await AsyncStorage.removeItem('refreshToken');
     }
 
     async getToken(): Promise<string | null> {
-        return await AsyncStorage.getItem('userToken');
+        return await AsyncStorage.getItem('token');
     }
 
     async refreshToken() {
@@ -92,7 +96,7 @@ class AuthService {
         });
 
         if (response.data.access) {
-            await AsyncStorage.setItem('userToken', response.data.access);
+            await AsyncStorage.setItem('token', response.data.access);
             return response.data.access;
         }
     }
@@ -120,7 +124,7 @@ class AuthService {
                 password,
                 password2
             }, {
-                timeout: 10000,
+                timeout: 30000, // 30 second timeout
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
@@ -149,7 +153,7 @@ class AuthService {
     }
 
     async getCurrentUser(): Promise<AxiosResponse<UserProfile>> {
-        const token = await AsyncStorage.getItem('userToken');
+        const token = await AsyncStorage.getItem('token');
         return axios.get<UserProfile>(`${API_URL}/profile/`, {
             headers: {
                 'Authorization': `Bearer ${token}`
