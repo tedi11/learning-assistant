@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui';
 import { Colors } from '@/constants/Colors';
 
-type TabIconName = 'home-outline' | 'home' | 'chatbubble-outline' | 'chatbubble' | 'document-text-outline' | 'document-text' | 'person-outline' | 'person';
+type TabIconName = 'home-outline' | 'home' | 'chatbubble-outline' | 'chatbubble' | 'help-circle-outline' | 'help-circle' | 'document-text-outline' | 'document-text' | 'person-outline' | 'person';
 
 interface Tab {
     name: string;
@@ -30,6 +30,12 @@ export function CustomTabBar() {
             icon: 'chatbubble-outline',
             activeIcon: 'chatbubble',
             route: '/(tabs)/assistant',
+        },
+        {
+            name: 'Questions',
+            icon: 'help-circle-outline',
+            activeIcon: 'help-circle',
+            route: '/(tabs)/questions',
         },
         {
             name: 'Documents',

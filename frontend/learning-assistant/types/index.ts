@@ -55,4 +55,24 @@ export interface DocumentAttachment {
   file: string;
   page_number: number;
   created_at: string;
+}
+
+export interface QuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface Question {
+  id: number;
+  question: string;
+  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_blank';
+  options: QuestionOption[];
+  answer: string;
+  userAnswer?: string;
+  isCorrect?: boolean;
+}
+
+export interface QuestionSet {
+  questions: Question[];
+  chapter_title: string;
 } 

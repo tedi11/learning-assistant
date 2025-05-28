@@ -30,8 +30,11 @@ from langchain_huggingface import HuggingFaceEndpoint
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from typing import Iterable
+from typing import Iterable, Any, Dict
 from langchain_core.documents import Document as LCDocument
+import requests
+import json
+from langchain_core.runnables.base import Runnable
 
 # Create your views here.
 
@@ -582,85 +585,882 @@ embeddings = HuggingFaceEmbeddings(model_name=HF_EMBED_MODEL_ID)
 HF_API_KEY = os.environ.get("HF_API_KEY")
 HF_LLM_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"
 
-llm = HuggingFaceEndpoint(
-    repo_id=HF_LLM_MODEL_ID,
-    huggingfacehub_api_token=HF_API_KEY,
-)
+print(f"DEBUG: Initializing LLM with model: {HF_LLM_MODEL_ID}")
+print(f"DEBUG: API Key present: {bool(HF_API_KEY)}")
+print(f"DEBUG: API Key length: {len(HF_API_KEY) if HF_API_KEY else 0}")
+
+# Use conversational task for Instruct models
+class HuggingFaceConversationalAPI(Runnable):
+    """Wrapper for Hugging Face Inference API with conversational task"""
+    
+    def __init__(self, model_id, api_token):
+        self.model_id = model_id
+        self.api_token = api_token
+        self.api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+        self.headers = {"Authorization": f"Bearer {api_token}"}
+    
+    def invoke(self, input: Any, config: Dict = None) -> str:
+        """Send request to HF Inference API with conversational format"""
+        # Handle both string input and dict input from LangChain
+        if isinstance(input, dict):
+            prompt = str(input)
+        else:
+            prompt = str(input)
+            
+        try:
+            # Format as simple text input for conversational task
+            payload = {
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 600,  # Increased significantly for more complete question generation
+                    "temperature": 0.5,     # Slightly higher for more creativity
+                    "repetition_penalty": 1.3,  # Higher to avoid repetition
+                    "do_sample": True,
+                    "top_p": 0.9,          # Higher for more diverse responses
+                    "return_full_text": False
+                }
+            }
+            
+            print(f"DEBUG: Sending request to HF API: {self.api_url}")
+            print(f"DEBUG: Payload: {payload}")
+            response = requests.post(
+                self.api_url, 
+                headers=self.headers, 
+                json=payload,
+                timeout=60  # Reduced timeout to 60 seconds
+            )
+            
+            print(f"DEBUG: HF API response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"DEBUG: HF API result: {result}")
+                
+                # Extract the generated response
+                if isinstance(result, dict) and 'generated_text' in result:
+                    return result['generated_text']
+                elif isinstance(result, list) and len(result) > 0:
+                    if 'generated_text' in result[0]:
+                        return result[0]['generated_text']
+                    elif 'conversation' in result[0]:
+                        conv = result[0]['conversation']
+                        if 'generated_responses' in conv and conv['generated_responses']:
+                            return conv['generated_responses'][-1]
+                
+                # Fallback
+                return str(result)
+            else:
+                error_msg = f"HF API error {response.status_code}: {response.text}"
+                print(f"DEBUG: {error_msg}")
+                return f"I apologize, but I'm currently unavailable. Please try again later."
+                
+        except Exception as e:
+            print(f"DEBUG: HF API exception: {str(e)}")
+            return f"I apologize, but I encountered an error: {str(e)}"
+
+# Create the API wrapper
+llm = HuggingFaceConversationalAPI(HF_LLM_MODEL_ID, HF_API_KEY)
+
+def clean_repetitive_text(text):
+    """Remove repetitive patterns from the generated text"""
+    import re
+    
+    # Remove repeated phrases (3+ words repeated)
+    text = re.sub(r'\b(\w+(?:\s+\w+){2,})\s+(?:\1\s*){2,}', r'\1', text, flags=re.IGNORECASE)
+    
+    # Remove repeated sentences
+    sentences = text.split('.')
+    unique_sentences = []
+    seen = set()
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence and sentence.lower() not in seen:
+            unique_sentences.append(sentence)
+            seen.add(sentence.lower())
+    
+    # Remove common repetitive patterns
+    cleaned_text = '. '.join(unique_sentences)
+    cleaned_text = re.sub(r'(Source:\s*Context[.\s]*)+', '', cleaned_text, flags=re.IGNORECASE)
+    cleaned_text = re.sub(r'(Answer:\s*)+', '', cleaned_text, flags=re.IGNORECASE)
+    cleaned_text = re.sub(r'\.{3,}', '...', cleaned_text)  # Replace multiple dots
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Remove extra whitespace
+    
+    return cleaned_text.strip()
 
 def format_docs(docs: Iterable[LCDocument]):
-    return "\n\n".join(doc.page_content for doc in docs)
+    # Limit context to 1200 characters for faster processing
+    context = "\n\n".join(doc.page_content for doc in docs)
+    return context[:1200] + "..." if len(context) > 1200 else context
 
 # Initialize text splitter
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200,
+    chunk_size=600,      # Smaller chunks for faster processing
+    chunk_overlap=100,   # Reduced overlap
 )
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def ask_question(request):
     try:
+        print(f"DEBUG: ask_question called with data: {request.data}")
+        
         question = request.data.get('question')
         chapter_id = request.data.get('chapterId')
         
+        print(f"DEBUG: Question: {question}")
+        print(f"DEBUG: Chapter ID: {chapter_id}")
+        
         if not question or not chapter_id:
+            print("DEBUG: Missing question or chapter_id")
             return Response({
                 'error': 'Question and chapter ID are required'
             }, status=400)
 
+        print(f"DEBUG: Getting chapter with ID: {chapter_id}")
         # Get the chapter content
         chapter = get_object_or_404(Chapter, id=chapter_id)
+        print(f"DEBUG: Found chapter: {chapter.title}")
+        
         note = Note.objects.filter(chapter=chapter).first()
+        print(f"DEBUG: Found note: {bool(note)}")
         
         if not note:
+            print("DEBUG: No note found for chapter")
             return Response({
                 'error': 'No content found for this chapter'
             }, status=404)
 
         # Get document if exists
         document = Document.objects.filter(chapter=chapter).first()
+        print(f"DEBUG: Found document: {bool(document)}")
         
         # Prepare the content for RAG
         content = note.content
         if document:
             content += "\n\n" + document.content
+        
+        print(f"DEBUG: Content length: {len(content)}")
 
         # Clean HTML content
         soup = BeautifulSoup(content, 'html.parser')
         clean_text = soup.get_text()
+        print(f"DEBUG: Clean text length: {len(clean_text)}")
 
+        # Limit content for question generation (to avoid token limits and speed up processing)
+        max_content_length = 4000  # Increased from 1500 to use more context
+        if len(clean_text) > max_content_length:
+            clean_text = clean_text[:max_content_length] + "..."
+        
         # Create document splits
+        print("DEBUG: Creating document splits...")
         docs = [LCDocument(page_content=clean_text)]
         splits = text_splitter.split_documents(docs)
+        print(f"DEBUG: Created {len(splits)} document splits")
 
         # Create vector store using FAISS
+        print("DEBUG: Creating FAISS vector store...")
         vectorstore = FAISS.from_documents(splits, embeddings)
+        print("DEBUG: Vector store created successfully")
 
         # Create retriever
-        retriever = vectorstore.as_retriever()
+        print("DEBUG: Creating retriever...")
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})  # Only get top 3 most relevant chunks
+        print("DEBUG: Retriever created successfully")
 
         # Create prompt template
+        print("DEBUG: Creating prompt template...")
         prompt = PromptTemplate.from_template(
-            "Context information is below.\n---------------------\n{context}\n---------------------\nGiven the context information and not prior knowledge, answer the query.\nQuery: {question}\nAnswer:\n"
+            """[Context] {context}
+
+[Question] {question}
+
+Please provide a clear, concise answer based on the context above. Keep your response under 100 words and avoid repeating information."""
         )
+        print("DEBUG: Prompt template created successfully")
 
         # Create RAG chain
+        print("DEBUG: Creating RAG chain...")
         rag_chain = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | prompt
             | llm
             | StrOutputParser()
         )
+        print("DEBUG: RAG chain created successfully")
 
         # Get answer
-        answer = rag_chain.invoke(question)
+        print(f"DEBUG: Invoking RAG chain with question: {question}")
+        try:
+            print("DEBUG: About to call rag_chain.invoke...")
+            import time
+            start_time = time.time()
+            answer = rag_chain.invoke(question)
+            end_time = time.time()
+            print(f"DEBUG: RAG chain completed in {end_time - start_time:.2f} seconds")
+            print(f"DEBUG: Got answer: {answer}")
+        except Exception as llm_error:
+            print(f"DEBUG: LLM invocation failed: {str(llm_error)}")
+            print(f"DEBUG: LLM error type: {type(llm_error).__name__}")
+            # Try a simpler approach without RAG
+            print("DEBUG: Trying simple LLM call without RAG...")
+            try:
+                simple_prompt = f"Based on the following context, answer this question: {question}\n\nContext: {clean_text[:2000]}..."
+                answer = llm.invoke(simple_prompt)
+                print(f"DEBUG: Simple LLM call succeeded: {answer}")
+            except Exception as simple_error:
+                print(f"DEBUG: Simple LLM call also failed: {str(simple_error)}")
+                return Response({
+                    'error': f'AI model is currently unavailable: {str(simple_error)}'
+                }, status=503)
+
+        # Clean repetitive text
+        cleaned_answer = clean_repetitive_text(answer)
 
         return Response({
-            'answer': answer
+            'answer': cleaned_answer
         })
 
     except Exception as e:
-        print(f"Error in ask_question: {str(e)}")
+        print(f"ERROR in ask_question: {str(e)}")
+        print(f"ERROR type: {type(e).__name__}")
+        import traceback
+        print(f"ERROR traceback: {traceback.format_exc()}")
         return Response({
             'error': 'An error occurred while processing your question'
         }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_questions(request):
+    try:
+        print(f"DEBUG: generate_questions called with data: {request.data}")
+        
+        chapter_id = request.data.get('chapterId')
+        question_count = request.data.get('questionCount', 5)  # Default to 5 questions
+        question_type = request.data.get('questionType', 'mixed')  # Default to mixed
+        
+        print(f"DEBUG: Chapter ID: {chapter_id}")
+        print(f"DEBUG: Question count: {question_count}")
+        print(f"DEBUG: Question type: {question_type}")
+        
+        if not chapter_id:
+            print("DEBUG: Missing chapter_id")
+            return Response({
+                'error': 'Chapter ID is required'
+            }, status=400)
+
+        print(f"DEBUG: Getting chapter with ID: {chapter_id}")
+        # Get the chapter content
+        chapter = get_object_or_404(Chapter, id=chapter_id)
+        print(f"DEBUG: Found chapter: {chapter.title}")
+        
+        note = Note.objects.filter(chapter=chapter).first()
+        print(f"DEBUG: Found note: {bool(note)}")
+        
+        if not note:
+            print("DEBUG: No note found for chapter")
+            return Response({
+                'error': 'No content found for this chapter'
+            }, status=404)
+
+        # Get document if exists
+        document = Document.objects.filter(chapter=chapter).first()
+        print(f"DEBUG: Found document: {bool(document)}")
+        
+        # Prepare the content for question generation
+        content = note.content
+        if document:
+            content += "\n\n" + document.content
+        
+        print(f"DEBUG: Content length: {len(content)}")
+
+        # Clean HTML content
+        soup = BeautifulSoup(content, 'html.parser')
+        clean_text = soup.get_text()
+        print(f"DEBUG: Clean text length: {len(clean_text)}")
+
+        print("DEBUG: Generating questions...")
+        
+        # Try multiple attempts with different sections of text if needed
+        attempts = [
+            {"start": 0, "length": 1500, "description": "first section (1500 chars)"},
+            {"start": 1500, "length": 2000, "description": "second section (2000 chars)"}, 
+            {"start": 3500, "length": 4000, "description": "third section (4000 chars)"},
+            {"start": 7500, "length": 4000, "description": "fourth section (4000 chars)"}
+        ]
+        
+        parsed_questions = []
+        
+        for attempt_num, attempt in enumerate(attempts, 1):
+            # Prepare context for this attempt - use different sections
+            start_pos = attempt["start"]
+            length = attempt["length"]
+            
+            # Make sure we don't go beyond the available text
+            if start_pos >= len(clean_text):
+                print(f"DEBUG: Attempt {attempt_num} skipped - start position {start_pos} beyond text length {len(clean_text)}")
+                break
+                
+            end_pos = min(start_pos + length, len(clean_text))
+            attempt_text = clean_text[start_pos:end_pos]
+            
+            # Skip if this section is too short to be useful
+            if len(attempt_text) < 500:
+                print(f"DEBUG: Attempt {attempt_num} skipped - section too short ({len(attempt_text)} chars)")
+                break
+            
+            print(f"DEBUG: Attempt {attempt_num} with {attempt['description']} (chars {start_pos}-{end_pos}, {len(attempt_text)} chars)")
+            
+            # Create question generation prompt based on type
+            if question_type == 'true_false':
+                question_prompt = f"""Based on this text, create {question_count} TRUE/FALSE questions that test understanding of key facts and concepts:
+
+TEXT:
+{attempt_text}
+
+INSTRUCTIONS: Create statements that are either clearly true or clearly false based on the text. IMPORTANT: Mix true and false answers - make some True and some False. Follow the EXACT format below.
+
+REQUIRED FORMAT (copy exactly):
+Q1: [Your statement here]
+Type: true_false
+Answer: [True or False]
+
+Q2: [Your statement here]
+Type: true_false
+Answer: [True or False]
+
+EXAMPLE:
+Q1: The main concept discussed in the text is machine learning
+Type: true_false
+Answer: True
+
+Q2: The text states that artificial intelligence was invented in 2020
+Type: true_false
+Answer: False
+
+Q3: According to the text, this technology is widely used
+Type: true_false
+Answer: True
+
+Q4: The document mentions that the process is completely automated
+Type: true_false
+Answer: False
+
+NOW CREATE {question_count} QUESTIONS WITH MIXED TRUE/FALSE ANSWERS FOLLOWING THIS EXACT FORMAT:"""
+
+            elif question_type == 'short_answer':
+                question_prompt = f"""Based on this text, create {question_count} SHORT ANSWER questions that test comprehension of key concepts:
+
+TEXT:
+{attempt_text}
+
+INSTRUCTIONS: Ask about definitions, explanations, or key points from the text. Provide concise but informative answers. Follow the EXACT format below.
+
+REQUIRED FORMAT (copy exactly):
+Q1: [Your question here]
+Type: short_answer
+Answer: [Your answer here]
+
+Q2: [Your question here]
+Type: short_answer
+Answer: [Your answer here]
+
+EXAMPLE:
+Q1: What is the main purpose of the concept discussed?
+Type: short_answer
+Answer: The main purpose is to solve complex problems using data-driven approaches
+
+Q2: How does this process work according to the text?
+Type: short_answer
+Answer: The process works by analyzing patterns and making predictions based on historical data
+
+NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+
+            elif question_type == 'multiple_choice':
+                question_prompt = f"""Based on this text, create {question_count} MULTIPLE CHOICE questions with exactly 4 options each:
+
+TEXT:
+{attempt_text}
+
+INSTRUCTIONS: Create questions about key facts, concepts, or details from the text. Make options plausible but only one correct. Follow the EXACT format below.
+
+REQUIRED FORMAT (copy exactly):
+Q1: [Your question here]
+Type: multiple_choice
+Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
+Answer: [A, B, C, or D]
+
+Q2: [Your question here]
+Type: multiple_choice
+Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
+Answer: [A, B, C, or D]
+
+EXAMPLE:
+Q1: According to the text, what is the primary benefit of this approach?
+Type: multiple_choice
+Options: A) Increased efficiency and accuracy B) Reduced costs only C) Better user interface D) Faster processing speed
+Answer: A
+
+Q2: Which method is mentioned as most effective?
+Type: multiple_choice
+Options: A) Traditional methods B) Machine learning algorithms C) Manual processing D) Statistical analysis
+Answer: B
+
+NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+
+            else:  # mixed type
+                question_prompt = f"""Based on this text, create {question_count} MIXED TYPE questions (multiple choice, true/false, and short answer):
+
+TEXT:
+{attempt_text}
+
+INSTRUCTIONS: Create a variety of question types that test different aspects of understanding. Follow the EXACT format below.
+
+REQUIRED FORMAT (copy exactly):
+Q1: [Your question here]
+Type: multiple_choice
+Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
+Answer: [A, B, C, or D]
+
+Q2: [Your question here]
+Type: true_false
+Answer: [True or False]
+
+Q3: [Your question here]
+Type: short_answer
+Answer: [Your answer here]
+
+EXAMPLE:
+Q1: What is the main advantage mentioned in the text?
+Type: multiple_choice
+Options: A) Cost reduction B) Improved accuracy C) Faster processing D) Better design
+Answer: B
+
+Q2: The text states that this technology is widely adopted in healthcare
+Type: true_false
+Answer: True
+
+Q3: How does this system improve performance?
+Type: short_answer
+Answer: The system improves performance by optimizing algorithms and reducing computational overhead
+
+NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+
+            # Generate questions using the LLM
+            try:
+                print(f"DEBUG: Calling LLM for question generation (attempt {attempt_num})...")
+                print(f"DEBUG: Prompt length: {len(question_prompt)}")
+                print(f"DEBUG: Context length: {len(attempt_text)}")
+                
+                questions_response = llm.invoke(question_prompt)
+                print(f"DEBUG: Raw LLM response length: {len(questions_response)}")
+                
+                # Check if the response looks like an error message
+                if "apologize" in questions_response.lower() or "error" in questions_response.lower() or "timeout" in questions_response.lower():
+                    print(f"DEBUG: LLM returned error message on attempt {attempt_num}, trying next attempt")
+                    continue
+                
+                # Parse the questions directly - don't clean the LLM's good structured output
+                print(f"DEBUG: Using raw LLM response for parsing (attempt {attempt_num})")
+                
+                # Parse the questions into structured format
+                parsed_questions = parse_questions(questions_response)
+                
+                print(f"DEBUG: Parsed {len(parsed_questions)} questions from LLM (attempt {attempt_num})")
+                
+                # Check if we have enough questions
+                if len(parsed_questions) >= question_count:
+                    print(f"DEBUG: Got enough questions ({len(parsed_questions)}) on attempt {attempt_num}, stopping")
+                    break
+                elif len(parsed_questions) > 0:
+                    print(f"DEBUG: Got {len(parsed_questions)} questions on attempt {attempt_num}, need {question_count}, trying next attempt")
+                    # Keep the questions we got and try again for more
+                    continue
+                else:
+                    print(f"DEBUG: Got 0 questions on attempt {attempt_num}, trying next attempt")
+                    continue
+                    
+            except Exception as llm_error:
+                print(f"DEBUG: LLM error on attempt {attempt_num}: {str(llm_error)}")
+                if attempt_num < len(attempts):
+                    print(f"DEBUG: Trying next attempt...")
+                    continue
+                else:
+                    print(f"DEBUG: All LLM attempts failed, will use fallback")
+                    break
+        
+        # If we still don't have enough questions after all attempts, add fallback questions
+        if len(parsed_questions) < question_count:
+            print(f"DEBUG: Only got {len(parsed_questions)} questions after all attempts, need {question_count}, adding fallback")
+            # Start fallback question IDs after the last LLM question ID
+            start_id = len(parsed_questions) + 1
+            fallback_questions = create_fallback_questions(clean_text, question_count - len(parsed_questions), question_type, start_id)
+            parsed_questions.extend(fallback_questions)
+        
+        return Response({
+            'questions': parsed_questions[:question_count],  # Ensure we return exactly the requested count
+            'chapter_title': chapter.title
+        })
+
+    except Exception as e:
+        print(f"ERROR in generate_questions: {str(e)}")
+        print(f"ERROR type: {type(e).__name__}")
+        import traceback
+        print(f"ERROR traceback: {traceback.format_exc()}")
+        return Response({
+            'error': 'An error occurred while generating questions'
+        }, status=500)
+
+def parse_questions(questions_text):
+    """Parse the generated questions text into structured format - handle both line-by-line and concatenated formats"""
+    import re
+    
+    questions = []
+    
+    print(f"DEBUG: Parsing questions from text: {questions_text}")
+    
+    # Split by Q1:, Q2:, Q3:, etc. to get individual question blocks
+    question_blocks = re.split(r'Q\d+:', questions_text)
+    
+    for i, block in enumerate(question_blocks[1:], 1):  # Skip first empty block
+        if not block.strip():
+            continue
+            
+        print(f"DEBUG: Processing block {i}: {block}")
+        
+        # Initialize defaults
+        question_text = ""
+        question_type = "short_answer"  # Default fallback
+        options = []
+        answer = ""
+        
+        # Clean the block text
+        block_text = block.strip()
+        
+        # Extract question type using regex (case insensitive)
+        type_match = re.search(r'Type:\s*([\w_-]+)', block_text, re.IGNORECASE)
+        if type_match:
+            question_type = type_match.group(1).strip().lower()
+            print(f"DEBUG: Found type: '{question_type}'")
+        
+        # Extract options using regex
+        options_match = re.search(r'Options:\s*(.+?)(?=Answer:|$)', block_text, re.IGNORECASE | re.DOTALL)
+        if options_match:
+            options_text = options_match.group(1).strip()
+            print(f"DEBUG: Found options text: '{options_text}'")
+            
+            # Parse options: A) text B) text C) text D) text
+            # Split by option letters and process each part
+            option_parts = re.split(r'\s*([A-D])\)\s*', options_text)
+            
+            # option_parts will be like: ['', 'A', 'Madrid ', 'B', 'Valencia ', 'C', 'Bilbao ', 'D', 'Rosario, Argentina']
+            for j in range(1, len(option_parts), 2):  # Skip empty first element, then take every other pair
+                if j + 1 < len(option_parts):
+                    letter = option_parts[j]
+                    text = option_parts[j + 1].strip()
+                    if text:  # Only add non-empty options
+                        options.append({
+                            'id': letter,
+                            'text': text
+                        })
+            print(f"DEBUG: Parsed {len(options)} options")
+            for opt in options:
+                print(f"  {opt['id']}) {opt['text'][:50]}...")
+        
+        # Extract answer using regex
+        answer_match = re.search(r'Answer:\s*([^\n\r]+)', block_text, re.IGNORECASE)
+        if answer_match:
+            answer = answer_match.group(1).strip()
+            print(f"DEBUG: Found answer: '{answer}'")
+        
+        # Extract question text - everything before "Type:" or at the beginning
+        question_match = re.search(r'^(.*?)(?=Type:|Options:|Answer:|$)', block_text, re.IGNORECASE | re.DOTALL)
+        if question_match:
+            question_text = question_match.group(1).strip()
+            # Clean up question text
+            question_text = re.sub(r'\s+', ' ', question_text)  # Normalize whitespace
+            print(f"DEBUG: Found question text: '{question_text[:50]}...'")
+        
+        # Validate and normalize question type
+        if question_type in ['multiple_choice', 'multiplechoice', 'multiple-choice']:
+            question_type = 'multiple_choice'
+        elif question_type in ['true_false', 'truefalse', 'true-false', 'tf']:
+            question_type = 'true_false'
+        elif question_type in ['short_answer', 'shortanswer', 'short-answer', 'sa']:
+            question_type = 'short_answer'
+        else:
+            # Try to infer type from content if not explicitly found
+            if options:
+                question_type = 'multiple_choice'
+                print(f"DEBUG: Inferred type as multiple_choice due to options")
+            elif answer.lower() in ['true', 'false']:
+                question_type = 'true_false'
+                print(f"DEBUG: Inferred type as true_false due to answer")
+            else:
+                question_type = 'short_answer'
+                print(f"DEBUG: Defaulted to short_answer")
+        
+        # Ensure we have basic data
+        if not question_text:
+            question_text = f"Question {i}"
+        if not answer:
+            if question_type == 'true_false':
+                answer = 'True'
+            elif question_type == 'multiple_choice' and options:
+                answer = options[0]['id']
+            else:
+                answer = 'Please refer to the study material.'
+        
+        # For multiple choice questions, preserve LLM's original options exactly as generated
+        if question_type == 'multiple_choice':
+            # Sort existing options by ID to ensure correct order
+            options.sort(key=lambda x: x['id'])
+            
+            # DON'T add missing options - preserve LLM's original choices
+            # The LLM generates high-quality options, so keep them as-is
+            
+            # Only validate that answer corresponds to an existing option
+            existing_ids = [opt['id'] for opt in options]
+            if answer not in existing_ids and options:
+                # If answer doesn't match any option ID, default to first option
+                answer = options[0]['id']
+                print(f"DEBUG: Answer '{answer}' not found in options, defaulting to '{options[0]['id']}'")
+        
+        # For true/false questions, ensure answer is valid
+        if question_type == 'true_false':
+            if answer.lower() not in ['true', 'false']:
+                # Try to extract True/False from the end of the block
+                tf_match = re.search(r'\b(True|False)\b', block_text, re.IGNORECASE)
+                if tf_match:
+                    answer = tf_match.group(1).title()
+                else:
+                    answer = 'True'  # Default fallback
+        
+        # Create the question object
+        question_obj = {
+            'id': i,
+            'question': question_text,
+            'type': question_type,
+            'options': options,
+            'answer': answer
+        }
+        
+        questions.append(question_obj)
+        print(f"DEBUG: Created question {i}: Type='{question_type}', Question='{question_text[:50]}...', Answer='{answer}', Options={len(options)}")
+    
+    print(f"DEBUG: Total questions parsed: {len(questions)}")
+    
+    return questions
+
+def create_fallback_questions(text, question_count, question_type, start_id):
+    """Create fallback questions if the LLM fails to generate enough questions"""
+    import re
+    
+    # Clean and analyze the text
+    text = re.sub(r'https?://\S+', '', text)  # Remove URLs
+    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    text = re.sub(r'[^\w\s.,!?;:]', '', text)  # Remove special characters except basic punctuation
+    
+    # Extract meaningful sentences (avoid very short or URL-heavy sentences)
+    sentences = re.split(r'[.!?]+', text)
+    meaningful_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        # Filter out sentences that are too short, too long, or contain mostly symbols
+        if (25 <= len(sentence) <= 200 and 
+            not re.search(r'https?://', sentence) and
+            len(re.findall(r'[a-zA-Z]', sentence)) > len(sentence) * 0.7 and
+            not sentence.lower().startswith(('figure', 'table', 'page', 'see', 'ref'))):
+            meaningful_sentences.append(sentence)
+    
+    # Extract key terms and concepts
+    # Look for capitalized words, technical terms, and important concepts
+    important_words = re.findall(r'\b[A-Z][a-z]{2,}\b', text)  # Capitalized words
+    technical_terms = re.findall(r'\b[a-z]{5,}\b', text.lower())  # Longer words (likely technical)
+    
+    # Count word frequency to find key concepts
+    word_freq = {}
+    all_words = important_words + [word.title() for word in technical_terms]
+    
+    for word in all_words:
+        if (word.lower() not in ['this', 'that', 'with', 'from', 'they', 'have', 'been', 'will', 'were', 'said', 'when', 'where', 'what', 'which', 'would', 'could', 'should', 'there', 'their', 'these', 'those'] and
+            len(word) > 3):
+            word_freq[word] = word_freq.get(word, 0) + 1
+    
+    # Get top keywords (most frequent important terms)
+    key_terms = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:15]
+    key_words = [term[0] for term in key_terms if term[1] > 1]  # Only words that appear multiple times
+    
+    # Extract numbers and dates that might be important
+    numbers = re.findall(r'\b\d{1,4}\b', text)
+    years = [num for num in numbers if 1900 <= int(num) <= 2030]
+    
+    print(f"DEBUG: Fallback generation - Found {len(meaningful_sentences)} sentences, {len(key_words)} key terms")
+    
+    fallback_questions = []
+    
+    for i in range(question_count):
+        question_id = i + start_id
+        
+        if question_type == 'true_false' or (question_type == 'mixed' and i % 3 == 1):
+            # Create true/false questions with better variety
+            if i < len(meaningful_sentences):
+                sentence = meaningful_sentences[i]
+                
+                # Create more sophisticated true/false questions with better variety
+                if i % 3 == 0:  # Make 1/3 false
+                    if key_words and len(key_words) > 1:
+                        # Replace a key term with another to make it false
+                        original_term = key_words[0]
+                        replacement_term = key_words[1] if len(key_words) > 1 else "incorrect concept"
+                        if original_term.lower() in sentence.lower():
+                            question_text = sentence.replace(original_term, replacement_term)
+                            answer = 'False'
+                        else:
+                            question_text = f"The text states that {key_words[0]} is not mentioned in the content"
+                            answer = 'False'
+                    else:
+                        question_text = f"According to the text: {sentence}"
+                        answer = 'False' if 'not' in sentence.lower() else 'True'
+                elif i % 3 == 1:  # Make 1/3 false (different pattern)
+                    question_text = f"The text never mentions {key_words[i % len(key_words)] if key_words else 'important concepts'}"
+                    answer = 'False'
+                else:  # Make 1/3 true
+                    # Make it true by using actual content
+                    if key_words:
+                        question_text = f"The text discusses concepts related to {key_words[i % len(key_words)]}"
+                    else:
+                        question_text = f"The following statement is from the text: {sentence[:100]}"
+                    answer = 'True'
+            else:
+                # Ensure variety even when we don't have enough sentences
+                if i % 2 == 0:
+                    if key_words:
+                        question_text = f"The content mentions {key_words[i % len(key_words)]}"
+                        answer = 'True'
+                    else:
+                        question_text = "The text contains educational content"
+                        answer = 'True'
+                else:
+                    if key_words:
+                        question_text = f"The text states that {key_words[i % len(key_words)]} is irrelevant to the topic"
+                        answer = 'False'
+                    else:
+                        question_text = "The document contains no useful information"
+                        answer = 'False'
+            
+            fallback_questions.append({
+                'id': question_id,
+                'question': question_text,
+                'type': 'true_false',
+                'options': [],
+                'answer': answer
+            })
+            
+        elif question_type == 'multiple_choice' or (question_type == 'mixed' and i % 3 == 0):
+            # Create multiple choice questions
+            if meaningful_sentences and key_words:
+                # Create questions based on key concepts
+                main_concept = key_words[i % len(key_words)]
+                
+                if i % 3 == 0:
+                    question_text = f"What is the primary focus when discussing {main_concept}?"
+                    options = [
+                        {'id': 'A', 'text': f'The theoretical aspects of {main_concept}'},
+                        {'id': 'B', 'text': f'The practical applications of {main_concept}'},
+                        {'id': 'C', 'text': f'The historical development of {main_concept}'},
+                        {'id': 'D', 'text': 'Other'}
+                    ]
+                elif i % 3 == 1:
+                    question_text = f"According to the text, which aspect of {main_concept} is emphasized?"
+                    options = [
+                        {'id': 'A', 'text': f'Its importance in the field'},
+                        {'id': 'B', 'text': f'Its technical complexity'},
+                        {'id': 'C', 'text': f'Its practical benefits'},
+                        {'id': 'D', 'text': 'Other'}
+                    ]
+                else:
+                    question_text = "Which of the following concepts is mentioned in the text?"
+                    # Use actual key terms as options - ensure we have 4
+                    if len(key_words) >= 4:
+                        options = [
+                            {'id': 'A', 'text': key_words[0]},
+                            {'id': 'B', 'text': key_words[1]},
+                            {'id': 'C', 'text': key_words[2]},
+                            {'id': 'D', 'text': key_words[3]}
+                        ]
+                    elif len(key_words) >= 3:
+                        options = [
+                            {'id': 'A', 'text': key_words[0]},
+                            {'id': 'B', 'text': key_words[1]},
+                            {'id': 'C', 'text': key_words[2]},
+                            {'id': 'D', 'text': 'Other'}
+                        ]
+                    elif len(key_words) >= 2:
+                        options = [
+                            {'id': 'A', 'text': key_words[0]},
+                            {'id': 'B', 'text': key_words[1]},
+                            {'id': 'C', 'text': 'Related concept'},
+                            {'id': 'D', 'text': 'Other'}
+                        ]
+                    else:
+                        options = [
+                            {'id': 'A', 'text': key_words[0] if key_words else 'Primary concept'},
+                            {'id': 'B', 'text': 'Secondary concept'},
+                            {'id': 'C', 'text': 'Related topic'},
+                            {'id': 'D', 'text': 'Other'}
+                        ]
+                
+            else:
+                question_text = "What is the main topic discussed in this content?"
+                options = [
+                    {'id': 'A', 'text': 'Educational concepts and theories'},
+                    {'id': 'B', 'text': 'Practical applications and methods'},
+                    {'id': 'C', 'text': 'Historical background and context'},
+                    {'id': 'D', 'text': 'Other'}
+                ]
+            
+            # Don't force 4 options - keep what we have (2-3 options is fine)
+            # Sort options by ID to ensure correct order
+            options.sort(key=lambda x: x['id'])
+            
+            fallback_questions.append({
+                'id': question_id,
+                'question': question_text,
+                'type': 'multiple_choice',
+                'options': options,
+                'answer': 'A'
+            })
+            
+        else:
+            # Create short answer questions
+            if meaningful_sentences and key_words:
+                main_concept = key_words[i % len(key_words)]
+                
+                if i % 4 == 0:
+                    question_text = f"Define {main_concept} as described in the text."
+                    answer = f"{main_concept} is a key concept that plays an important role in the subject matter discussed."
+                elif i % 4 == 1:
+                    question_text = f"Explain the significance of {main_concept} mentioned in the content."
+                    answer = f"The significance of {main_concept} lies in its contribution to understanding the main topics covered."
+                elif i % 4 == 2:
+                    question_text = f"How does {main_concept} relate to the overall theme of the text?"
+                    answer = f"{main_concept} relates to the overall theme by providing essential context and supporting the main arguments."
+                else:
+                    question_text = "Summarize the key points discussed in this section."
+                    answer = f"The key points include discussions about {', '.join(key_words[:3]) if key_words else 'important concepts'} and their applications."
+            else:
+                question_text = "What are the main learning objectives covered in this content?"
+                answer = "The main learning objectives focus on understanding core concepts and their practical applications."
+            
+            fallback_questions.append({
+                'id': question_id,
+                'question': question_text,
+                'type': 'short_answer',
+                'options': [],
+                'answer': answer
+            })
+    
+    return fallback_questions

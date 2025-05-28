@@ -22,7 +22,7 @@ export const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 120000, // 120 second timeout (increased from 30 seconds)
 });
 
 // API methods for courses
@@ -48,6 +48,12 @@ export const chapterApi = {
     api.put<Chapter>(`/courses/${courseId}/chapters/${chapterId}/`, data),
   deleteChapter: (courseId: number, chapterId: number) => 
     api.delete(`/courses/${courseId}/chapters/${chapterId}/`),
+};
+
+// API methods for questions
+export const questionApi = {
+  generateQuestions: (chapterId: number, questionCount: number = 5, questionType: string = 'mixed') => 
+    api.post('/generate-questions/', { chapterId, questionCount, questionType }),
 };
 
 // Add a request interceptor to add the auth token
