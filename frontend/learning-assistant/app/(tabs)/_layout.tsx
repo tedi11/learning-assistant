@@ -25,6 +25,12 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
+                    name="questions"
+                    options={{
+                        title: 'Questions',
+                    }}
+                />
+                <Tabs.Screen
                     name="load_documents"
                     options={{
                         title: 'Documents',

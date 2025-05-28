@@ -40,7 +40,7 @@ class AuthService {
                 email,
                 password,
             }, {
-                timeout: 30000, // 30 second timeout
+                timeout: 120000, // 120 second timeout (increased from 30 seconds)
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
@@ -124,7 +124,7 @@ class AuthService {
                 password,
                 password2
             }, {
-                timeout: 30000, // 30 second timeout
+                timeout: 120000, // 120 second timeout (increased from 30 seconds)
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
