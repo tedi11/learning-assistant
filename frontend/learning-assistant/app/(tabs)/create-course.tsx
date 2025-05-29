@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
 import authService from '@/services/authService';
@@ -78,52 +78,68 @@ export default function CreateCourseScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <KeyboardAvoidingView 
+                style={styles.keyboardAvoidingView}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+            >
                 <View style={styles.header}>
-                    <TouchableOpacity 
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                    >
-                        <Text style={styles.backButtonText}>← Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Create New Course</Text>
+                    <View style={styles.headerContent}>
+                        <Text style={styles.title}>✨ Create New Course</Text>
+                        <Text style={styles.subtitle}>Build your personalized learning journey</Text>
+                    </View>
                 </View>
                 
-                <View style={styles.form}>
-                    <Text style={styles.label}>Course Title</Text>
-                    <TextInput
-                        style={styles.input}
-                        value={title}
-                        onChangeText={setTitle}
-                        placeholder="Enter course title"
-                        placeholderTextColor="#999"
-                        editable={!loading}
-                    />
+                <ScrollView 
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.form}>
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>📚 Course Details</Text>
+                            
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Course Title *</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={title}
+                                    onChangeText={setTitle}
+                                    placeholder="Enter course title"
+                                    placeholderTextColor="#999"
+                                    editable={!loading}
+                                />
+                            </View>
 
-                    <Text style={styles.label}>Description</Text>
-                    <TextInput
-                        style={[styles.input, styles.textArea]}
-                        value={description}
-                        onChangeText={setDescription}
-                        placeholder="Enter course description"
-                        placeholderTextColor="#999"
-                        multiline
-                        numberOfLines={4}
-                        textAlignVertical="top"
-                        editable={!loading}
-                    />
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Description</Text>
+                                <TextInput
+                                    style={[styles.input, styles.textArea]}
+                                    value={description}
+                                    onChangeText={setDescription}
+                                    placeholder="Enter course description (optional)"
+                                    placeholderTextColor="#999"
+                                    multiline
+                                    numberOfLines={4}
+                                    textAlignVertical="top"
+                                    editable={!loading}
+                                />
+                            </View>
 
-                    <TouchableOpacity 
-                        style={[styles.button, loading && styles.buttonDisabled]}
-                        onPress={handleCreateCourse}
-                        disabled={loading}
-                    >
-                        <Text style={styles.buttonText}>
-                            {loading ? 'Creating...' : 'Create Course'}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
+                            <TouchableOpacity 
+                                style={[styles.button, loading && styles.buttonDisabled]}
+                                onPress={handleCreateCourse}
+                                disabled={loading}
+                            >
+                                <Text style={styles.buttonText}>
+                                    {loading ? 'Creating...' : 'Create Course'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -131,68 +147,123 @@ export default function CreateCourseScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
+    },
+    keyboardAvoidingView: {
+        flex: 1,
     },
     scrollView: {
         flex: 1,
+        backgroundColor: '#f8f9fa',
+    },
+    scrollContent: {
+        padding: 20,
+        paddingBottom: 40,
     },
     header: {
-        padding: 16,
+        padding: 20,
         paddingTop: 20,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        flexDirection: 'row',
+        borderBottomColor: '#f0f0f0',
+        flexDirection: 'column',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    headerContent: {
         alignItems: 'center',
-    },
-    backButton: {
-        marginRight: 16,
-    },
-    backButtonText: {
-        fontSize: 16,
-        color: '#007AFF',
+        marginTop: 16,
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
     },
     form: {
-        padding: 16,
+        flex: 1,
+    },
+    section: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+    },
+    sectionTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 20,
+        letterSpacing: 0.3,
+    },
+    inputGroup: {
+        marginBottom: 20,
     },
     label: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: '#1a1a1a',
         marginBottom: 8,
+        letterSpacing: 0.2,
     },
     input: {
         backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
+        borderWidth: 2,
+        borderColor: '#e9ecef',
+        borderRadius: 12,
+        padding: 18,
         fontSize: 16,
-        marginBottom: 16,
+        color: '#1a1a1a',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     textArea: {
         height: 120,
+        textAlignVertical: 'top',
     },
     button: {
         backgroundColor: '#007AFF',
-        padding: 16,
-        borderRadius: 8,
+        paddingVertical: 18,
+        borderRadius: 12,
         alignItems: 'center',
-        marginTop: 16,
-        height: 50,
-        justifyContent: 'center',
+        marginTop: 8,
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     buttonDisabled: {
-        opacity: 0.7,
+        opacity: 0.6,
+        shadowOpacity: 0,
+        elevation: 0,
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
 }); 

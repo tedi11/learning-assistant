@@ -46,7 +46,7 @@ const ZoomModal = React.memo(({
         >
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContainer}>
-                    <Text style={styles.modalTitle}>Text Size</Text>
+                    <Text style={styles.modalTitle}>📏 Text Size</Text>
                     <Text style={styles.scaleValue}>{Math.round(localScale * 100)}%</Text>
                     <View style={styles.sliderContainer}>
                         <Slider
@@ -175,37 +175,40 @@ export default function SummarizeScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <TouchableOpacity 
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                    >
-                        <Text style={styles.backButtonText}>← Back to Chapter</Text>
-                    </TouchableOpacity>
-                    <View style={styles.headerActions}>
-                        {!loading && !summarizing && !summary && (
-                            <TouchableOpacity
-                                style={styles.summarizeButton}
-                                onPress={handleSummarize}
-                            >
-                                <Text style={styles.summarizeButtonText}>Generate Summary</Text>
-                            </TouchableOpacity>
+                <TouchableOpacity 
+                    style={styles.backButton}
+                    onPress={() => router.back()}
+                >
+                    <Text style={styles.backButtonText}>← Back</Text>
+                </TouchableOpacity>
+                <View style={styles.headerContent}>
+                    <Text style={styles.title}>
+                        {loading ? "🔄 Loading..." : (
+                            <>
+                                📊 <Text style={styles.chapterTitle}>{chapter?.title || "Chapter"}</Text> Summary
+                            </>
                         )}
-                        <TouchableOpacity
-                            style={styles.zoomButton}
-                            onPress={() => setShowZoomModal(true)}
-                        >
-                            <Ionicons name="text" size={24} color="#007AFF" />
-                        </TouchableOpacity>
-                    </View>
+                    </Text>
+                    <Text style={styles.subtitle}>
+                        {summary ? "AI-generated summary of your chapter content" : "View your chapter content and generate an AI summary"}
+                    </Text>
                 </View>
-                <Text style={styles.title}>
-                    {loading ? "Loading..." : (
-                        <>
-                            Chapter <Text style={styles.italicText}>{chapter?.title || "Chapter"}</Text> Summary
-                        </>
+                <View style={styles.headerActions}>
+                    {!loading && !summarizing && !summary && (
+                        <TouchableOpacity
+                            style={styles.summarizeButton}
+                            onPress={handleSummarize}
+                        >
+                            <Text style={styles.summarizeButtonText}>🤖 Generate Summary</Text>
+                        </TouchableOpacity>
                     )}
-                </Text>
+                    <TouchableOpacity
+                        style={styles.zoomButton}
+                        onPress={() => setShowZoomModal(true)}
+                    >
+                        <Ionicons name="text" size={20} color="#007AFF" />
+                    </TouchableOpacity>
+                </View>
             </View>
             
             <ZoomModal 
@@ -222,50 +225,88 @@ export default function SummarizeScreen() {
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
             >
-                <View style={styles.contentContainer}>
-                    {loading || summarizing ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#007AFF" />
-                            <Text style={styles.loadingText}>
-                                {summarizing ? 'Generating summary...' : 'Loading...'}
-                            </Text>
-                        </View>
-                    ) : (
-                        <RenderHtml
-                            contentWidth={width}
-                            source={{ html: summary || (initialContent as string) }}
-                            tagsStyles={{
-                                h1: {
-                                    fontSize: 28 * textScale,
-                                    fontWeight: 'bold',
+                <View style={styles.contentSection}>
+                    <Text style={styles.sectionTitle}>
+                        {summary ? "📝 Chapter Summary" : "📖 Chapter Content"}
+                    </Text>
+                    <View style={styles.contentContainer}>
+                        {loading || summarizing ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="large" color="#007AFF" />
+                                <Text style={styles.loadingText}>
+                                    {summarizing ? '🤖 Generating summary...' : '📚 Loading content...'}
+                                </Text>
+                            </View>
+                        ) : (
+                            <RenderHtml
+                                contentWidth={width - 80}
+                                source={{ html: summary || (initialContent as string) }}
+                                tagsStyles={{
+                                    h1: {
+                                        fontSize: 28 * textScale,
+                                        fontWeight: '800',
+                                        color: '#1a1a1a',
+                                        marginVertical: 16,
+                                        letterSpacing: 0.3,
+                                    },
+                                    h2: {
+                                        fontSize: 24 * textScale,
+                                        fontWeight: '700',
+                                        color: '#1a1a1a',
+                                        marginVertical: 12,
+                                        letterSpacing: 0.2,
+                                    },
+                                    h3: {
+                                        fontSize: 20 * textScale,
+                                        fontWeight: '600',
+                                        color: '#1a1a1a',
+                                        marginVertical: 8,
+                                        letterSpacing: 0.1,
+                                    },
+                                    p: {
+                                        fontSize: 16 * textScale,
+                                        color: '#333',
+                                        lineHeight: 26 * textScale,
+                                        marginVertical: 8,
+                                        fontWeight: '400',
+                                    },
+                                    ul: {
+                                        marginVertical: 8,
+                                    },
+                                    li: {
+                                        fontSize: 16 * textScale,
+                                        color: '#333',
+                                        lineHeight: 24 * textScale,
+                                        marginVertical: 4,
+                                    },
+                                    strong: {
+                                        fontWeight: '700',
+                                        color: '#1a1a1a',
+                                    },
+                                    em: {
+                                        fontStyle: 'italic',
+                                        color: '#555',
+                                    }
+                                }}
+                                baseStyle={{
                                     color: '#333',
-                                    marginVertical: 16,
-                                },
-                                h2: {
-                                    fontSize: 24 * textScale,
-                                    fontWeight: 'bold',
-                                    color: '#333',
-                                    marginVertical: 12,
-                                },
-                                h3: {
-                                    fontSize: 20 * textScale,
-                                    fontWeight: 'bold',
-                                    color: '#333',
-                                    marginVertical: 8,
-                                },
-                                p: {
                                     fontSize: 16 * textScale,
-                                    color: '#333',
-                                    lineHeight: 24 * textScale,
-                                    marginVertical: 8,
-                                }
-                            }}
-                            baseStyle={{
-                                color: '#333',
-                                fontSize: 16 * textScale,
-                                lineHeight: 24 * textScale,
-                            }}
-                        />
+                                    lineHeight: 26 * textScale,
+                                    fontWeight: '400',
+                                }}
+                            />
+                        )}
+                    </View>
+                    
+                    {summary && !loading && !summarizing && (
+                        <View style={styles.regenerateContainer}>
+                            <TouchableOpacity
+                                style={styles.regenerateButton}
+                                onPress={handleSummarize}
+                            >
+                                <Text style={styles.regenerateButtonText}>🔄 Regenerate Summary</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
             </ScrollView>
@@ -276,75 +317,155 @@ export default function SummarizeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        padding: 16,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
+        borderBottomColor: '#f0f0f0',
+        paddingTop: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     backButton: {
-        marginBottom: 0,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        marginBottom: 8,
     },
     backButtonText: {
         fontSize: 16,
         color: '#007AFF',
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 16,
-    },
-    contentContainer: {
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-    },
-    italicText: {
-        fontStyle: 'italic'
-    },
-    summarizeButton: {
-        backgroundColor: '#007AFF',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-    },
-    summarizeButtonText: {
-        color: '#fff',
-        fontSize: 16,
         fontWeight: '600',
     },
-    loadingContainer: {
-        padding: 20,
+    headerContent: {
         alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingBottom: 16,
     },
-    loadingText: {
-        marginTop: 10,
-        color: '#666',
+    title: {
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    chapterTitle: {
+        fontStyle: 'italic',
+        color: '#007AFF',
+        fontWeight: '700',
+    },
+    subtitle: {
         fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
+        marginBottom: 12,
     },
     headerActions: {
         flexDirection: 'row',
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 12,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        gap: 16,
+    },
+    summarizeButton: {
+        backgroundColor: '#007AFF',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    summarizeButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
     zoomButton: {
-        padding: 8,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: '#f8f9fa',
+        borderWidth: 1,
+        borderColor: '#e9ecef',
+    },
+    scrollView: {
+        flex: 1,
+        backgroundColor: '#f8f9fa',
+    },
+    scrollContent: {
+        padding: 20,
+        paddingBottom: 40,
+    },
+    contentSection: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+    },
+    sectionTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 20,
+        letterSpacing: 0.3,
+    },
+    contentContainer: {
+        backgroundColor: '#fafbfc',
+        padding: 20,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e9ecef',
+        minHeight: 200,
+    },
+    loadingContainer: {
+        padding: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        color: '#666',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    regenerateContainer: {
+        marginTop: 20,
+        alignItems: 'center',
+    },
+    regenerateButton: {
+        backgroundColor: '#f8f9fa',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#007AFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    regenerateButtonText: {
+        color: '#007AFF',
+        fontSize: 15,
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
     modalOverlay: {
         flex: 1,
@@ -356,31 +477,30 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         width: '90%',
         maxWidth: 400,
-        borderRadius: 16,
-        padding: 24,
+        borderRadius: 20,
+        padding: 28,
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
         zIndex: 2,
     },
     modalTitle: {
         fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
+        fontWeight: '800',
+        color: '#1a1a1a',
         marginBottom: 24,
         textAlign: 'center',
+        letterSpacing: 0.3,
     },
     scaleValue: {
         fontSize: 48,
-        fontWeight: 'bold',
+        fontWeight: '800',
         color: '#007AFF',
         textAlign: 'center',
         marginBottom: 24,
+        letterSpacing: 0.5,
     },
     sliderContainer: {
         width: '100%',
@@ -400,26 +520,37 @@ const styles = StyleSheet.create({
     },
     modalButton: {
         flex: 1,
-        paddingVertical: 14,
-        borderRadius: 10,
+        paddingVertical: 16,
+        borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     cancelButton: {
-        backgroundColor: '#f5f5f5',
-        borderWidth: 1,
-        borderColor: '#ddd',
+        backgroundColor: '#f8f9fa',
+        borderWidth: 2,
+        borderColor: '#e9ecef',
     },
     applyButton: {
         backgroundColor: '#007AFF',
+        shadowColor: '#007AFF',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     cancelButtonText: {
-        color: '#333',
+        color: '#666',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
     applyButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
 }); 

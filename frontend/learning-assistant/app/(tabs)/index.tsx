@@ -18,7 +18,7 @@ export default function HomeScreen() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+    const [selectedCourseIds, setSelectedCourseIds] = useState<number[]>([]);
 
     const fetchCourses = async () => {
         try {
@@ -47,7 +47,7 @@ export default function HomeScreen() {
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        setSelectedCourseId(null);
+        setSelectedCourseIds([]);
         fetchCourses();
     }, []);
 
@@ -56,18 +56,37 @@ export default function HomeScreen() {
     }, []);
 
     const handleCoursePress = (course: Course) => {
-        router.push(`/course/${course.id}`);
+        if (selectedCourseIds.length > 0) {
+            // If in selection mode, toggle selection instead of navigating
+            handleCourseSelect(course.id);
+        } else {
+            // Normal navigation
+            router.push(`/course/${course.id}`);
+        }
+    };
+
+    const handleCourseSelect = (courseId: number) => {
+        setSelectedCourseIds(prev => {
+            if (prev.includes(courseId)) {
+                return prev.filter(id => id !== courseId);
+            } else {
+                return [...prev, courseId];
+            }
+        });
     };
 
     const handleDeleteSelected = async () => {
-        if (!selectedCourseId) {
-            Alert.alert('Error', 'Please select a course to delete');
+        if (selectedCourseIds.length === 0) {
+            Alert.alert('Error', 'Please select courses to delete');
             return;
         }
 
+        const courseCount = selectedCourseIds.length;
+        const coursePlural = courseCount === 1 ? 'course' : 'courses';
+
         Alert.alert(
-            'Delete Course',
-            'Are you sure you want to delete this course? This will also delete all chapters and content within the course.',
+            'Delete Courses',
+            `Are you sure you want to delete ${courseCount} ${coursePlural}? This will also delete all chapters and content within the selected ${coursePlural}.`,
             [
                 {
                     text: 'Cancel',
@@ -79,24 +98,46 @@ export default function HomeScreen() {
                     onPress: async () => {
                         try {
                             const token = await authService.getToken();
-                            await axios.delete(
-                                `http://192.168.1.135:8000/api/courses/${selectedCourseId}/`,
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`
-                                    }
-                                }
+                            
+                            // Delete all selected courses
+                            await Promise.all(
+                                selectedCourseIds.map(courseId =>
+                                    axios.delete(
+                                        `http://192.168.1.135:8000/api/courses/${courseId}/`,
+                                        {
+                                            headers: {
+                                                'Authorization': `Bearer ${token}`
+                                            }
+                                        }
+                                    )
+                                )
                             );
-                            setSelectedCourseId(null);
+                            
+                            setSelectedCourseIds([]);
                             fetchCourses();
+                            Alert.alert('Success', `${courseCount} ${coursePlural} deleted successfully`);
                         } catch (error) {
-                            console.error('Error deleting course:', error);
-                            Alert.alert('Error', 'Failed to delete course');
+                            console.error('Error deleting courses:', error);
+                            Alert.alert('Error', 'Failed to delete some courses');
                         }
                     }
                 }
             ]
         );
+    };
+
+    const handleClearSelection = () => {
+        setSelectedCourseIds([]);
+    };
+
+    const handleSelectAll = () => {
+        if (selectedCourseIds.length === courses.length) {
+            // If all are selected, deselect all
+            setSelectedCourseIds([]);
+        } else {
+            // Otherwise, select all
+            setSelectedCourseIds(courses.map(course => course.id));
+        }
     };
 
     if (loading) {
@@ -110,24 +151,43 @@ export default function HomeScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <Text style={styles.title}>My Courses</Text>
-                    {selectedCourseId && courses.length > 0 && (
-                        <TouchableOpacity
-                            onPress={handleDeleteSelected}
-                            style={styles.deleteButton}
-                        >
-                            <Text style={styles.deleteButtonText}>Delete Selected</Text>
-                        </TouchableOpacity>
-                    )}
+                <View style={styles.headerContent}>
+                    <Text style={styles.title}>🏠 My Courses</Text>
+                    <Text style={styles.subtitle}>Manage and explore your learning journey</Text>
                 </View>
-                <View style={styles.headerBottom}>
+                <View style={styles.headerActions}>
                     <TouchableOpacity 
                         style={styles.createButton} 
                         onPress={() => router.push('/create-course')}
                     >
-                        <Text style={styles.createButtonText}>Create Course</Text>
+                        <Text style={styles.createButtonText}>+ Create Course</Text>
                     </TouchableOpacity>
+                    {selectedCourseIds.length > 0 && (
+                        <>
+                            <TouchableOpacity
+                                onPress={handleSelectAll}
+                                style={[styles.selectionButton, styles.selectAllButton]}
+                            >
+                                <Text style={styles.selectAllButtonText}>
+                                    {selectedCourseIds.length === courses.length ? 'Deselect All' : 'Select All'}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleDeleteSelected}
+                                style={[styles.selectionButton, styles.deleteButton]}
+                            >
+                                <Text style={styles.deleteButtonText}>
+                                    Delete ({selectedCourseIds.length})
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleClearSelection}
+                                style={[styles.selectionButton, styles.cancelButton]}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
             </View>
             
@@ -160,19 +220,17 @@ export default function HomeScreen() {
                             key={course.id}
                             course={course}
                             onPress={() => handleCoursePress(course)}
-                            isSelected={selectedCourseId === course.id}
-                            onSelect={() => setSelectedCourseId(
-                                selectedCourseId === course.id ? null : course.id
-                            )}
+                            isSelected={selectedCourseIds.includes(course.id)}
+                            onSelect={() => handleCourseSelect(course.id)}
+                            isSelectionMode={selectedCourseIds.length > 0}
                         />
                     ))
                 )}
             </ScrollView>
-            {courses.length > 0 && (
+            {courses.length > 0 && selectedCourseIds.length === 0 && (
                 <View style={styles.hintContainer}>
                     <Text style={styles.hintText}>
-                        Tip: Long press on a course to select it for deletion
-                        
+                        💡 Tip: Long press on a course to select it for deletion
                     </Text>
                 </View>
             )}
@@ -183,103 +241,159 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
+        borderBottomColor: '#f0f0f0',
         paddingTop: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
-    headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    headerContent: {
+        padding: 24,
         alignItems: 'center',
-        padding: 16,
-        paddingBottom: 8,
-        gap: 8,
-    },
-    headerBottom: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        padding: 16,
-        paddingTop: 8,
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
-        flex: 1,
+        fontSize: 32,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    subtitle: {
+        fontSize: 17,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        paddingTop: 8,
+        gap: 12,
     },
     scrollView: {
         flex: 1,
         marginBottom: 32,
+        backgroundColor: '#f8f9fa',
     },
     scrollContent: {
-        paddingVertical: 8,
+        paddingVertical: 20,
+        paddingHorizontal: 16,
     },
     emptyState: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
-        marginTop: 50,
+        padding: 40,
+        marginTop: 60,
     },
     emptyStateText: {
-        fontSize: 16,
+        fontSize: 20,
         color: '#666',
-        marginBottom: 16,
+        marginBottom: 20,
+        textAlign: 'center',
+        fontWeight: '600',
+        lineHeight: 28,
     },
     emptyStateButton: {
         backgroundColor: '#007AFF',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 8,
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        borderRadius: 12,
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     emptyStateButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     createButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderRadius: 12,
         backgroundColor: '#007AFF',
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     createButtonText: {
         color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    selectionButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    selectAllButton: {
+        backgroundColor: '#34C759',
     },
     deleteButton: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 6,
         backgroundColor: '#FF3B30',
+    },
+    cancelButton: {
+        backgroundColor: '#8E8E93',
+    },
+    selectAllButtonText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '700',
     },
     deleteButtonText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    cancelButtonText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '700',
     },
     hintContainer: {
         position: 'absolute',
-        bottom: 10,
-        left: 0,
-        right: 0,
+        bottom: 16,
+        left: 16,
+        right: 16,
+        backgroundColor: '#f8f9fa',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#e9ecef',
     },
     hintText: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#666',
         textAlign: 'center',
         fontStyle: 'italic',
+        fontWeight: '500',
     },
 });

@@ -142,7 +142,7 @@ export default function AssistantScreen() {
           </View>
           
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Course</Text>
+            <Text style={styles.sectionTitle}>📚 Select Course</Text>
             {loadingCourses ? (
               <ActivityIndicator size="small" color={Colors.light.primary} />
             ) : error ? (
@@ -214,7 +214,7 @@ export default function AssistantScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Chapter</Text>
+            <Text style={styles.sectionTitle}>📖 Select Chapter</Text>
             <ChapterPicker
               selectedChapter={selectedChapter}
               onSelectChapter={setSelectedChapter}
@@ -223,7 +223,7 @@ export default function AssistantScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Ask a Question</Text>
+            <Text style={styles.sectionTitle}>🤖 Ask a Question</Text>
             {selectedChapter && (!selectedChapter.notes || selectedChapter.notes.length === 0) && (
               <View style={styles.warningContainer}>
                 <Text style={styles.warningText}>⚠️ No content available in this chapter</Text>
@@ -265,7 +265,7 @@ export default function AssistantScreen() {
 
           {answer && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Answer</Text>
+              <Text style={styles.sectionTitle}>💡 Answer</Text>
               <View style={styles.answerContainer}>
                 <Text style={styles.answerText}>{answer}</Text>
               </View>
@@ -296,36 +296,52 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   header: {
-    marginBottom: 30,
+    marginBottom: 32,
     alignItems: 'center',
+    paddingVertical: 20,
+    backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '800',
     color: Colors.light.primary,
     marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: Colors.light.gray,
+    fontSize: 17,
+    color: '#666',
     marginBottom: 10,
+    textAlign: 'center',
+    fontWeight: '500',
+    lineHeight: 24,
   },
   section: {
     marginBottom: 24,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 18,
+    color: '#1a1a1a',
+    letterSpacing: 0.3,
   },
   courseList: {
     paddingVertical: 8,
@@ -354,54 +370,77 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     minHeight: 120,
     textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 2,
+    borderColor: '#e9ecef',
     borderRadius: 12,
-    padding: 16,
+    padding: 18,
     fontSize: 16,
     backgroundColor: '#fff',
     color: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   inputDisabled: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
     opacity: 0.7,
+    borderColor: '#dee2e6',
   },
   askButton: {
     marginTop: 8,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 16,
+    backgroundColor: Colors.light.primary,
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   disabledButton: {
     opacity: 0.6,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   loadingContainer: {
     alignItems: 'center',
     marginVertical: 24,
-    padding: 20,
+    padding: 24,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: Colors.light.primary,
+    fontWeight: '500',
   },
   answerContainer: {
     backgroundColor: '#f8f9fa',
-    padding: 20,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   answerText: {
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 26,
     color: '#333',
+    fontWeight: '400',
   },
   errorContainer: {
     padding: 16,
@@ -452,19 +491,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
+    padding: 18,
     backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   dropdownButtonText: {
     fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
   dropdownIcon: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 14,
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -474,33 +520,41 @@ const styles = StyleSheet.create({
   },
   dropdownList: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 8,
-    width: '90%',
+    width: '85%',
     maxHeight: '80%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   webDropdownList: {
     width: '100%',
-    maxWidth: 800,
+    maxWidth: 450,
   },
   dropdownItem: {
-    padding: 16,
+    padding: 18,
     borderRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
   },
   selectedDropdownItem: {
-    backgroundColor: Colors.light.primary,
+    backgroundColor: Colors.light.primary + '10',
+    borderBottomColor: Colors.light.primary + '20',
   },
   dropdownItemText: {
     fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
   selectedDropdownItemText: {
-    color: '#fff',
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -508,14 +562,17 @@ const styles = StyleSheet.create({
   },
   warningContainer: {
     backgroundColor: '#fff3cd',
-    borderColor: '#ffeeba',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderColor: '#ffc107',
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
   },
   warningText: {
     color: '#856404',
     fontSize: 14,
+    fontWeight: '500',
   },
 }); 

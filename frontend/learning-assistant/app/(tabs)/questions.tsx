@@ -176,11 +176,11 @@ export default function QuestionsScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.title}>Study Questions</Text>
-          <Text style={styles.subtitle}>Generate flashcards to test your knowledge</Text>
+          <Text style={styles.subtitle}>Generate personalized flashcards to test your knowledge</Text>
         </View>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Course</Text>
+          <Text style={styles.sectionTitle}>📚 Select Course</Text>
           {loadingCourses ? (
             <ActivityIndicator size="small" color={Colors.light.primary} />
           ) : error && !selectedCourse ? (
@@ -252,7 +252,7 @@ export default function QuestionsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Chapter</Text>
+          <Text style={styles.sectionTitle}>📖 Select Chapter</Text>
           <ChapterPicker
             selectedChapter={selectedChapter}
             onSelectChapter={setSelectedChapter}
@@ -261,22 +261,12 @@ export default function QuestionsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Generate Questions</Text>
+          <Text style={styles.sectionTitle}>⚡ Generate Questions</Text>
           {selectedChapter && (!selectedChapter.notes || selectedChapter.notes.length === 0) && (
             <View style={styles.warningContainer}>
               <Text style={styles.warningText}>⚠️ No content available in this chapter</Text>
             </View>
           )}
-          
-          <View style={styles.questionTypesInfoContainer}>
-            <Text style={styles.questionTypeTitle}>Question Types:</Text>
-            <View style={styles.questionTypeList}>
-              <Text style={styles.questionTypeItem}>• Multiple Choice Questions</Text>
-              <Text style={styles.questionTypeItem}>• True/False Questions</Text>
-              <Text style={styles.questionTypeItem}>• Short Answer Questions</Text>
-              <Text style={styles.questionTypeItem}>• Fill in the Blanks</Text>
-            </View>
-          </View>
 
           <View style={styles.questionCountContainer}>
             <Text style={styles.questionCountLabel}>Number of Questions:</Text>
@@ -578,36 +568,52 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   header: {
-    marginBottom: 30,
+    marginBottom: 32,
     alignItems: 'center',
+    paddingVertical: 20,
+    backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '800',
     color: Colors.light.primary,
     marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: Colors.light.gray,
+    fontSize: 17,
+    color: '#666',
     marginBottom: 10,
+    textAlign: 'center',
+    fontWeight: '500',
+    lineHeight: 24,
   },
   section: {
     marginBottom: 24,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 18,
+    color: '#1a1a1a',
+    letterSpacing: 0.3,
   },
   loginContainer: {
     flex: 1,
@@ -628,20 +634,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    borderWidth: 1,
+    padding: 18,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   dropdownButtonText: {
     fontSize: 16,
     color: '#333',
     flex: 1,
+    fontWeight: '500',
   },
   dropdownIcon: {
-    fontSize: 12,
-    color: Colors.light.gray,
+    fontSize: 14,
+    color: Colors.light.primary,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -651,29 +664,34 @@ const styles = StyleSheet.create({
   },
   dropdownList: {
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 16,
     maxHeight: 300,
-    width: '80%',
+    width: '85%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   webDropdownList: {
-    maxWidth: 400,
+    maxWidth: 450,
   },
   dropdownItem: {
-    padding: 16,
+    padding: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#f5f5f5',
   },
   dropdownItemText: {
     fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
   selectedDropdownItem: {
-    backgroundColor: Colors.light.primary + '20',
+    backgroundColor: Colors.light.primary + '10',
+    borderBottomColor: Colors.light.primary + '20',
   },
   selectedDropdownItemText: {
     color: Colors.light.primary,
@@ -714,92 +732,42 @@ const styles = StyleSheet.create({
     color: '#856404',
     fontSize: 14,
   },
-  questionTypesInfoContainer: {
-    backgroundColor: Colors.light.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  questionTypeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  questionTypeList: {
-    marginLeft: 8,
-  },
-  questionTypeItem: {
-    fontSize: 14,
-    color: Colors.light.gray,
-    marginBottom: 4,
-  },
-  generateButton: {
-    backgroundColor: Colors.light.primary,
-    paddingVertical: 16,
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: Colors.light.gray,
-  },
-  errorSection: {
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
-    borderWidth: 1,
-  },
-  placeholderContainer: {
-    alignItems: 'center',
-    padding: 30,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e9ecef',
-    borderStyle: 'dashed',
-  },
-  placeholderText: {
-    fontSize: 18,
-    color: Colors.light.gray,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  placeholderSubtext: {
-    fontSize: 14,
-    color: Colors.light.gray,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   questionCountContainer: {
     backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
   },
   questionCountLabel: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   questionCountButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 8,
   },
   questionCountButton: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 2,
     borderColor: '#e9ecef',
+    backgroundColor: '#fff',
+    flex: 1,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   selectedQuestionCount: {
-    backgroundColor: Colors.light.primary + '20',
+    backgroundColor: Colors.light.primary + '15',
+    borderColor: Colors.light.primary,
   },
   questionCountButtonText: {
     fontSize: 16,
@@ -1006,43 +974,58 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.light.primary,
   },
-  questionTypeLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
   questionTypeSelectorContainer: {
     backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
+    padding: 18,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  questionTypeLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
   },
   questionTypeButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'space-between',
   },
   questionTypeButton: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#e9ecef',
-    flex: 1,
-    minWidth: 80,
+    backgroundColor: '#fff',
+    width: '48.5%',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 60,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: 12,
   },
   selectedQuestionType: {
-    backgroundColor: Colors.light.primary + '20',
+    backgroundColor: Colors.light.primary + '15',
+    borderColor: Colors.light.primary,
+    shadowColor: Colors.light.primary,
+    shadowOpacity: 0.2,
   },
   questionTypeButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#333',
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   selectedQuestionTypeText: {
     color: Colors.light.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   questionTypeBadge: {
     backgroundColor: Colors.light.primary + '20',
@@ -1059,5 +1042,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#28a745',
+  },
+  placeholderContainer: {
+    alignItems: 'center',
+    padding: 30,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderStyle: 'dashed',
+  },
+  placeholderText: {
+    fontSize: 18,
+    color: Colors.light.gray,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: Colors.light.gray,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  generateButton: {
+    backgroundColor: Colors.light.primary,
+    paddingVertical: 18,
+    borderRadius: 12,
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    marginTop: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: Colors.light.gray,
+  },
+  errorSection: {
+    backgroundColor: '#f8d7da',
+    borderColor: '#f5c6cb',
+    borderWidth: 1,
   },
 }); 

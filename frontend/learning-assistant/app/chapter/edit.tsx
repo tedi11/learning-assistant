@@ -86,9 +86,14 @@ export default function EditChapterScreen() {
                 >
                     <Text style={styles.backButtonText}>← Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>
-                    {initialContent ? 'Edit Content' : 'Add Content'}
-                </Text>
+                <View style={styles.headerContent}>
+                    <Text style={styles.title}>
+                        {initialContent ? '✏️ Edit Content' : '📝 Add Content'}
+                    </Text>
+                    <Text style={styles.subtitle}>
+                        {initialContent ? 'Update your chapter content' : 'Create rich content for your chapter'}
+                    </Text>
+                </View>
             </View>
 
             <KeyboardAvoidingView 
@@ -96,58 +101,64 @@ export default function EditChapterScreen() {
                 style={styles.editorContainer}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 80}
             >
-                <ScrollView style={styles.editor} contentContainerStyle={styles.editorContent}>
-                    <RichEditor
-                        ref={richText}
-                        onChange={setContent}
-                        initialContentHTML={content}
-                        placeholder="Start typing your content here..."
-                        style={styles.richEditor}
-                    />
-                </ScrollView>
-                
-                <RichToolbar
-                    editor={richText}
-                    actions={[
-                        // Headings
-                        actions.heading2,
-                        actions.heading3,
-                        '|', // separator
-                        // Text formatting
-                        actions.setBold,
-                        actions.setItalic,
-                        '|', // separator
-                        // Lists
-                        actions.insertBulletsList,
-                        actions.insertOrderedList,
-                        '|', // separator
-                        // Undo/Redo
-                        actions.undo,
-                        actions.redo,
-                    ]}
-                    iconMap={{
-                        [actions.heading2]: ({ tintColor }: { tintColor: string }) => (
-                            <Text style={[styles.toolbarButton, { color: tintColor }]}>H1</Text>
-                        ),
-                        [actions.heading3]: ({ tintColor }: { tintColor: string }) => (
-                            <Text style={[styles.toolbarButton, { color: tintColor }]}>H2</Text>
-                        ),
-                    }}
-                    selectedIconTint="#007AFF"
-                    iconTint="#666666"
-                    style={styles.toolbar}
-                />
+                <View style={styles.editorSection}>
+                    <Text style={styles.sectionTitle}>✍️ Content Editor</Text>
+                    
+                    <View style={styles.editorWrapper}>
+                        <ScrollView style={styles.editor} contentContainerStyle={styles.editorContent}>
+                            <RichEditor
+                                ref={richText}
+                                onChange={setContent}
+                                initialContentHTML={content}
+                                placeholder="Start typing your content here... Use the toolbar below to format your text."
+                                style={styles.richEditor}
+                            />
+                        </ScrollView>
+                        
+                        <RichToolbar
+                            editor={richText}
+                            actions={[
+                                // Headings
+                                actions.heading2,
+                                actions.heading3,
+                                '|', // separator
+                                // Text formatting
+                                actions.setBold,
+                                actions.setItalic,
+                                '|', // separator
+                                // Lists
+                                actions.insertBulletsList,
+                                actions.insertOrderedList,
+                                '|', // separator
+                                // Undo/Redo
+                                actions.undo,
+                                actions.redo,
+                            ]}
+                            iconMap={{
+                                [actions.heading2]: ({ tintColor }: { tintColor: string }) => (
+                                    <Text style={[styles.toolbarButton, { color: tintColor }]}>H1</Text>
+                                ),
+                                [actions.heading3]: ({ tintColor }: { tintColor: string }) => (
+                                    <Text style={[styles.toolbarButton, { color: tintColor }]}>H2</Text>
+                                ),
+                            }}
+                            selectedIconTint="#007AFF"
+                            iconTint="#666666"
+                            style={styles.toolbar}
+                        />
+                    </View>
+                </View>
 
                 <TouchableOpacity 
                     style={[
                         styles.submitButton,
-                        loading && styles.submitButtonDisabled
+                        (!content.trim() || loading) && styles.submitButtonDisabled
                     ]}
                     onPress={handleSave}
-                    disabled={loading}
+                    disabled={!content.trim() || loading}
                 >
                     <Text style={styles.submitButtonText}>
-                        {loading ? 'Saving...' : 'Save Content'}
+                        {loading ? '💾 Saving Content...' : '🚀 Save Content'}
                     </Text>
                 </TouchableOpacity>
             </KeyboardAvoidingView>
@@ -158,65 +169,136 @@ export default function EditChapterScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        padding: 16,
+        borderBottomColor: '#f0f0f0',
+        paddingTop: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     backButton: {
-        marginBottom: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        marginBottom: 8,
     },
     backButtonText: {
         fontSize: 16,
         color: '#007AFF',
+        fontWeight: '600',
+    },
+    headerContent: {
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingBottom: 24,
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
     },
     editorContainer: {
         flex: 1,
-        padding: 16,
+        backgroundColor: '#f8f9fa',
+        padding: 20,
+    },
+    editorSection: {
+        flex: 1,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+        marginBottom: 20,
+    },
+    sectionTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 16,
+        letterSpacing: 0.3,
+    },
+    editorWrapper: {
+        flex: 1,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: '#e9ecef',
+        overflow: 'hidden',
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     editor: {
         flex: 1,
         backgroundColor: '#fff',
-        borderRadius: 8,
-        marginBottom: 16,
+        minHeight: 300,
     },
     editorContent: {
-        paddingBottom: 16,
+        padding: 16,
+        paddingBottom: 32,
     },
     richEditor: {
-        minHeight: 200,
+        minHeight: 250,
         flex: 1,
+        fontSize: 16,
+        lineHeight: 24,
     },
     toolbar: {
-        backgroundColor: '#f8f8f8',
-        borderRadius: 8,
-        marginBottom: 16,
+        backgroundColor: '#f8f9fa',
+        borderTopWidth: 1,
+        borderTopColor: '#e9ecef',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
     },
     submitButton: {
         backgroundColor: '#007AFF',
-        padding: 16,
-        borderRadius: 8,
+        paddingVertical: 18,
+        paddingHorizontal: 24,
+        borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     submitButtonDisabled: {
-        opacity: 0.7,
+        backgroundColor: '#ccc',
+        shadowOpacity: 0,
+        elevation: 0,
     },
     submitButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
     toolbarButton: {
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 14,
+        fontWeight: '700',
         color: '#666666',
     },
 }); 

@@ -222,7 +222,7 @@ export default function CourseScreen() {
                     >
                         <Text style={styles.backButtonText}>← Back</Text>
                     </TouchableOpacity>
-                    <Text style={styles.title}>Course Not Found</Text>
+                    <Text style={styles.title}>📚 Course Not Found</Text>
                 </View>
             </SafeAreaView>
         );
@@ -249,7 +249,7 @@ export default function CourseScreen() {
                 </View>
                 <View style={styles.headerBottom}>
                     <View style={styles.courseInfo}>
-                        <Text style={styles.title}>{course?.title}</Text>
+                        <Text style={styles.title}>📚 {course?.title}</Text>
                         {course?.description && (
                             <Text style={styles.description}>{course.description}</Text>
                         )}
@@ -278,7 +278,9 @@ export default function CourseScreen() {
             >
                 {(!course?.chapters || course.chapters.length === 0) ? (
                     <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateIcon}>📖</Text>
                         <Text style={styles.emptyStateText}>No chapters yet</Text>
+                        <Text style={styles.emptyStateSubtext}>Create your first chapter to start building your course content</Text>
                         <TouchableOpacity 
                             style={styles.emptyStateButton}
                             onPress={handleCreateChapter}
@@ -303,7 +305,7 @@ export default function CourseScreen() {
             {course?.chapters.length > 0 && (
                 <View style={styles.hintContainer}>
                     <Text style={styles.hintText}>
-                        Tip: Long press on a chapter to select it for deletion
+                        💡 Tip: Long press on a chapter to select it for deletion
                     </Text>
                 </View>
             )}
@@ -314,132 +316,170 @@ export default function CourseScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
     },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        paddingTop: 20, // Extra padding for notch
+        borderBottomColor: '#f0f0f0',
+        paddingTop: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     headerTop: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
-        paddingBottom: 8,
+        justifyContent: 'space-between',
+        padding: 20,
+        paddingBottom: 12,
     },
     headerBottom: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        padding: 16,
+        padding: 20,
         paddingTop: 8,
     },
     courseInfo: {
         flex: 1,
-        marginRight: 16,
+        marginRight: 20,
     },
     backButton: {
-        marginRight: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 4,
     },
     backButtonText: {
         fontSize: 16,
         color: '#007AFF',
+        fontWeight: '600',
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4,
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        letterSpacing: 0.3,
     },
     description: {
-        fontSize: 14,
+        fontSize: 16,
         color: '#666',
+        lineHeight: 24,
+        fontWeight: '500',
     },
     scrollView: {
         flex: 1,
-        marginBottom: 75, // Match the new bottom spacing
+        marginBottom: 0,
+        backgroundColor: '#f8f9fa',
     },
     scrollContent: {
-        padding: 16,
+        padding: 20,
     },
     emptyState: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
-        marginTop: 50,
+        padding: 40,
+        marginTop: 60,
+    },
+    emptyStateIcon: {
+        fontSize: 64,
+        marginBottom: 20,
     },
     emptyStateText: {
-        fontSize: 16,
+        fontSize: 20,
         color: '#666',
-        marginBottom: 16,
+        marginBottom: 12,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    emptyStateSubtext: {
+        fontSize: 16,
+        color: '#999',
+        marginBottom: 32,
+        textAlign: 'center',
+        lineHeight: 24,
+        fontWeight: '400',
     },
     emptyStateButton: {
         backgroundColor: '#007AFF',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 8,
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        borderRadius: 12,
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     emptyStateButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     createButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 12,
         backgroundColor: '#007AFF',
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     createButtonText: {
         color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '700',
     },
     chapterCard: {
         backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
         flexDirection: 'row',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
     },
     selectedChapter: {
         borderWidth: 2,
         borderColor: '#007AFF',
+        backgroundColor: '#007AFF05',
     },
     chapterContent: {
         flex: 1,
     },
     chapterTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 6,
+        letterSpacing: 0.2,
     },
     chapterMeta: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#666',
+        fontWeight: '500',
     },
     chapterActions: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
     },
     selectedText: {
         color: '#007AFF',
@@ -449,33 +489,43 @@ const styles = StyleSheet.create({
     chapterArrow: {
         fontSize: 20,
         color: '#007AFF',
-        marginLeft: 8,
+        fontWeight: '600',
     },
     deleteButton: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 6,
-        backgroundColor: '#FF3B30',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: '#ff3b30',
+        shadowColor: '#ff3b30',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     deleteButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     hintContainer: {
         position: 'absolute',
-        bottom: 85, // Increased to be higher above the tab bar
+        bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: 'rgba(245, 245, 245, 0.95)',
-        paddingVertical: 8,
+        backgroundColor: 'rgba(248, 249, 250, 0.95)',
+        paddingVertical: 12,
         borderTopWidth: 1,
-        borderTopColor: '#e0e0e0',
+        borderTopColor: '#f0f0f0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     hintText: {
-        fontSize: 12,
+        fontSize: 14,
         color: '#666',
         textAlign: 'center',
-        fontStyle: 'italic',
+        fontWeight: '500',
     },
 }); 
