@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Alert, Modal, TextInput, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import authService from '@/services/authService';
@@ -26,6 +26,18 @@ interface Course {
 interface Chapter {
     id: number;
     title: string;
+}
+
+interface PDFInfo {
+    fileName: string;
+    totalPages: number;
+    sampleText: string;
+    maxAllowedPages: number;
+}
+
+interface PageRange {
+    startPage: number;
+    endPage: number;
 }
 
 // Separate Modal Component
@@ -203,6 +215,194 @@ const CourseSelectionModal = React.memo(({
     );
 });
 
+// Page Range Selection Modal
+const PageRangeModal = React.memo(({ 
+    visible, 
+    pdfInfo, 
+    onClose, 
+    onConfirm,
+    loading 
+}: {
+    visible: boolean;
+    pdfInfo: PDFInfo | null;
+    onClose: () => void;
+    onConfirm: (range: PageRange) => void;
+    loading: boolean;
+}) => {
+    const [pageRange, setPageRange] = useState<PageRange>({
+        startPage: 1,
+        endPage: 1
+    });
+    const [startPageText, setStartPageText] = useState('1');
+    const [endPageText, setEndPageText] = useState('1');
+
+    React.useEffect(() => {
+        if (pdfInfo) {
+            const maxEnd = Math.min(pdfInfo.totalPages, pdfInfo.maxAllowedPages);
+            setPageRange({
+                startPage: 1,
+                endPage: maxEnd
+            });
+            setStartPageText('1');
+            setEndPageText(maxEnd.toString());
+        }
+    }, [pdfInfo]);
+
+    const handleStartPageChange = (text: string) => {
+        setStartPageText(text);
+        if (text.trim() === '') {
+            setPageRange(prev => ({ ...prev, startPage: 1 }));
+        } else {
+            const num = parseInt(text) || 1;
+            const validNum = Math.max(1, Math.min(num, pdfInfo?.totalPages || 1));
+            setPageRange(prev => ({ ...prev, startPage: validNum }));
+        }
+    };
+
+    const handleEndPageChange = (text: string) => {
+        setEndPageText(text);
+        if (text.trim() === '') {
+            setPageRange(prev => ({ ...prev, endPage: prev.startPage }));
+        } else {
+            const num = parseInt(text) || 1;
+            const validNum = Math.max(pageRange.startPage, Math.min(num, pdfInfo?.totalPages || 1));
+            setPageRange(prev => ({ ...prev, endPage: validNum }));
+        }
+    };
+
+    const handleConfirm = () => {
+        // Validate range
+        if (pageRange.startPage < 1 || pageRange.startPage > (pdfInfo?.totalPages || 1)) {
+            Alert.alert('Error', 'Start page is invalid');
+            return;
+        }
+        if (pageRange.endPage < pageRange.startPage || pageRange.endPage > (pdfInfo?.totalPages || 1)) {
+            Alert.alert('Error', 'End page is invalid');
+            return;
+        }
+        if (pageRange.endPage - pageRange.startPage + 1 > (pdfInfo?.maxAllowedPages || 10)) {
+            Alert.alert('Error', `Maximum ${pdfInfo?.maxAllowedPages || 10} pages allowed`);
+            return;
+        }
+
+        onConfirm(pageRange);
+    };
+
+    if (!pdfInfo) return null;
+
+    return (
+        <Modal
+            visible={visible}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={onClose}
+        >
+            <TouchableOpacity 
+                style={styles.modalOverlay} 
+                activeOpacity={1}
+                onPress={() => {
+                    Keyboard.dismiss();
+                    onClose();
+                }}
+            >
+                <TouchableOpacity 
+                    style={styles.pageRangeModalContent} 
+                    activeOpacity={1}
+                    onPress={() => {
+                        Keyboard.dismiss();
+                    }}
+                >
+                    <Text style={styles.modalTitle}>Select Page Range</Text>
+                    
+                    <View style={styles.pdfInfoContainer}>
+                        <Text style={styles.pdfFileName}>{pdfInfo.fileName}</Text>
+                        <Text style={styles.pdfPages}>Total Pages: {pdfInfo.totalPages}</Text>
+                        <Text style={styles.maxPagesText}>
+                            Maximum {pdfInfo.maxAllowedPages} pages allowed
+                        </Text>
+                    </View>
+
+                    <View style={styles.sampleTextContainer}>
+                        <Text style={styles.sampleLabel}>Sample text:</Text>
+                        <Text style={styles.sampleText} numberOfLines={3}>
+                            {pdfInfo.sampleText}
+                        </Text>
+                    </View>
+
+                    <View style={styles.pageRangeContainer}>
+                        <View style={styles.pageInputContainer}>
+                            <Text style={styles.inputLabel}>Start:</Text>
+                            <TextInput
+                                style={styles.pageInput}
+                                value={startPageText}
+                                onChangeText={handleStartPageChange}
+                                onBlur={() => {
+                                    setStartPageText(pageRange.startPage.toString());
+                                }}
+                                keyboardType="numeric"
+                                placeholder="1"
+                                selectTextOnFocus={true}
+                                clearButtonMode="while-editing"
+                            />
+                        </View>
+
+                        <View style={styles.pageInputContainer}>
+                            <Text style={styles.inputLabel}>End:</Text>
+                            <TextInput
+                                style={styles.pageInput}
+                                value={endPageText}
+                                onChangeText={handleEndPageChange}
+                                onBlur={() => {
+                                    setEndPageText(pageRange.endPage.toString());
+                                }}
+                                keyboardType="numeric"
+                                placeholder="1"
+                                selectTextOnFocus={true}
+                                clearButtonMode="while-editing"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.rangeInfoContainer}>
+                        <Text style={styles.rangeInfo}>
+                            Selected: {pageRange.endPage - pageRange.startPage + 1} pages
+                        </Text>
+                        {pageRange.endPage - pageRange.startPage + 1 > pdfInfo.maxAllowedPages && (
+                            <Text style={styles.errorText}>
+                                Too many pages! Max {pdfInfo.maxAllowedPages}.
+                            </Text>
+                        )}
+                    </View>
+
+                    <View style={styles.modalActions}>
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                onClose();
+                            }}
+                        >
+                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.confirmButton, loading && styles.buttonDisabled]}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                handleConfirm();
+                            }}
+                            disabled={loading || pageRange.endPage - pageRange.startPage + 1 > pdfInfo.maxAllowedPages}
+                        >
+                            <Text style={styles.confirmButtonText}>
+                                {loading ? 'Processing...' : 'Continue'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </TouchableOpacity>
+        </Modal>
+    );
+});
+
 export default function LoadDocumentsScreen() {
     const router = useRouter();
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -210,6 +410,11 @@ export default function LoadDocumentsScreen() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [showCourseModal, setShowCourseModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerResult | null>(null);
+    
+    // New state for PDF page range selection
+    const [showPageRangeModal, setShowPageRangeModal] = useState(false);
+    const [pdfInfo, setPdfInfo] = useState<PDFInfo | null>(null);
+    const [selectedPageRange, setSelectedPageRange] = useState<PageRange | null>(null);
 
     const fetchDocuments = async () => {
         try {
@@ -246,12 +451,43 @@ export default function LoadDocumentsScreen() {
     useFocusEffect(
         useCallback(() => {
             fetchDocuments();
-            fetchCourses();
         }, [])
     );
 
+    const getPdfInfo = async (file: DocumentPicker.DocumentPickerAsset) => {
+        try {
+            const token = await authService.getToken();
+            if (!token) return null;
+
+            const formData = new FormData();
+            formData.append('file', {
+                uri: file.uri,
+                type: 'application/pdf',
+                name: file.name
+            } as any);
+
+            const response = await axios.post('http://192.168.1.135:8000/api/documents/pdf-info/', formData, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data',
+                }
+            });
+
+            return response.data as PDFInfo;
+        } catch (error) {
+            console.error('Error getting PDF info:', error);
+            Alert.alert('Error', 'Failed to analyze PDF file');
+            return null;
+        }
+    };
+
     const handleUpload = async () => {
         try {
+            // Fetch courses only when needed
+            if (courses.length === 0) {
+                await fetchCourses();
+            }
+
             const result = await DocumentPicker.getDocumentAsync({
                 type: 'application/pdf',
                 copyToCacheDirectory: true
@@ -262,11 +498,36 @@ export default function LoadDocumentsScreen() {
             }
 
             setSelectedFile(result);
-            setShowCourseModal(true);
+            
+            // Get PDF info first
+            setLoading(true);
+            const info = await getPdfInfo(result.assets[0]);
+            setLoading(false);
+            
+            if (info) {
+                setPdfInfo(info);
+                setShowPageRangeModal(true);
+                // Dismiss keyboard when modal opens
+                Keyboard.dismiss();
+            }
         } catch (error) {
             console.error('Error picking document:', error);
             Alert.alert('Error', 'Failed to select document');
+            setLoading(false);
         }
+    };
+
+    const handlePageRangeConfirm = (range: PageRange) => {
+        setSelectedPageRange(range);
+        setShowPageRangeModal(false);
+        setShowCourseModal(true);
+    };
+
+    const handlePageRangeCancel = () => {
+        setShowPageRangeModal(false);
+        setSelectedFile(null);
+        setPdfInfo(null);
+        setSelectedPageRange(null);
     };
 
     const handleConfirmUpload = async (data: { courseId?: number; chapterId?: number; newCourseTitle?: string; newChapterTitle?: string; createNew: boolean }) => {
@@ -312,6 +573,12 @@ export default function LoadDocumentsScreen() {
                 }
             }
 
+            // Add page range if selected
+            if (selectedPageRange) {
+                formData.append('startPage', selectedPageRange.startPage.toString());
+                formData.append('endPage', selectedPageRange.endPage.toString());
+            }
+
             const response = await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -332,6 +599,8 @@ export default function LoadDocumentsScreen() {
                             onPress: () => {
                                 setShowCourseModal(false);
                                 setSelectedFile(null);
+                                setPdfInfo(null);
+                                setSelectedPageRange(null);
                             }
                         },
                         {
@@ -353,6 +622,8 @@ export default function LoadDocumentsScreen() {
 
                                     setShowCourseModal(false);
                                     setSelectedFile(null);
+                                    setPdfInfo(null);
+                                    setSelectedPageRange(null);
                                     fetchDocuments();
                                     Alert.alert('Success', 'Document uploaded successfully');
                                 } catch (error) {
@@ -370,6 +641,8 @@ export default function LoadDocumentsScreen() {
 
             setShowCourseModal(false);
             setSelectedFile(null);
+            setPdfInfo(null);
+            setSelectedPageRange(null);
             fetchDocuments();
             Alert.alert('Success', 'Document uploaded successfully');
         } catch (error) {
@@ -457,8 +730,18 @@ export default function LoadDocumentsScreen() {
                 onClose={() => {
                     setShowCourseModal(false);
                     setSelectedFile(null);
+                    setPdfInfo(null);
+                    setSelectedPageRange(null);
                 }}
                 onSubmit={handleConfirmUpload}
+                loading={loading}
+            />
+
+            <PageRangeModal
+                visible={showPageRangeModal}
+                pdfInfo={pdfInfo}
+                onClose={handlePageRangeCancel}
+                onConfirm={handlePageRangeConfirm}
                 loading={loading}
             />
         </SafeAreaView>
@@ -716,5 +999,94 @@ const styles = StyleSheet.create({
         color: '#333',
         textAlign: 'center',
         fontWeight: '600',
+    },
+    pdfInfoContainer: {
+        marginBottom: 16,
+    },
+    pdfFileName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 4,
+    },
+    pdfPages: {
+        fontSize: 13,
+        color: '#666',
+        fontWeight: '500',
+        marginBottom: 2,
+    },
+    maxPagesText: {
+        fontSize: 13,
+        color: '#666',
+        fontWeight: '500',
+    },
+    sampleTextContainer: {
+        marginBottom: 16,
+    },
+    sampleLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 4,
+    },
+    sampleText: {
+        fontSize: 12,
+        color: '#666',
+        fontWeight: '500',
+        lineHeight: 16,
+    },
+    pageRangeContainer: {
+        flexDirection: 'row',
+        marginBottom: 16,
+        gap: 12,
+    },
+    pageInputContainer: {
+        flex: 1,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 6,
+    },
+    pageInput: {
+        borderWidth: 2,
+        borderColor: '#e9ecef',
+        borderRadius: 10,
+        padding: 12,
+        fontSize: 16,
+        backgroundColor: '#fff',
+        textAlign: 'center',
+        fontWeight: '600',
+    },
+    rangeInfoContainer: {
+        marginBottom: 16,
+        alignItems: 'center',
+    },
+    rangeInfo: {
+        fontSize: 14,
+        color: '#007AFF',
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    errorText: {
+        fontSize: 12,
+        color: '#FF3B30',
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    pageRangeModalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        width: '85%',
+        maxHeight: '70%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
     },
 }); 

@@ -447,6 +447,40 @@ export default function QuestionsScreen() {
                   </View>
                 </View>
               )}
+
+              {/* Ask Assistant Button */}
+              <View style={styles.assistantButtonContainer}>
+                <Text style={styles.assistantButtonDescription}>
+                  Need help understanding this question?
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.askAssistantButton,
+                    (!selectedCourse || !selectedChapter) && styles.askAssistantButtonDisabled
+                  ]}
+                  onPress={() => {
+                    if (!selectedCourse || !selectedChapter) {
+                      return;
+                    }
+                    router.push({
+                      pathname: '/assistant',
+                      params: {
+                        courseId: selectedCourse.id.toString(),
+                        chapterId: selectedChapter.id.toString(),
+                        questionText: questions[currentQuestionIndex].question
+                      }
+                    });
+                  }}
+                  disabled={!selectedCourse || !selectedChapter}
+                >
+                  <Text style={[
+                    styles.askAssistantButtonText,
+                    (!selectedCourse || !selectedChapter) && styles.askAssistantButtonTextDisabled
+                  ]}>
+                    🤖 Ask Assistant
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Progress Bar */}
@@ -1093,5 +1127,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8d7da',
     borderColor: '#f5c6cb',
     borderWidth: 1,
+  },
+  assistantButtonContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  assistantButtonDescription: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  askAssistantButton: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    minWidth: 180,
+  },
+  askAssistantButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  askAssistantButtonDisabled: {
+    backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  askAssistantButtonTextDisabled: {
+    color: '#ccc',
   },
 }); 

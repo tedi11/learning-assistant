@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, Platform, Modal, Touch
 import { Text, Button, TextInput } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { api, courseApi } from '@/services/api';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ChapterPicker } from '@/components/ChapterPicker';
 import { Chapter, Course } from '@/types';
 import { Colors } from '@/constants/Colors';
@@ -21,6 +21,9 @@ export default function AssistantScreen() {
   const router = useRouter();
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Get URL parameters for auto-population
+  const { courseId, chapterId, questionText } = useLocalSearchParams();
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -42,6 +45,30 @@ export default function AssistantScreen() {
       setLoadingCourses(false);
     }
   }, [user, fetchCourses]);
+
+  // Auto-populate fields when URL parameters are provided
+  useEffect(() => {
+    if (courses.length > 0 && courseId && chapterId) {
+      // Find and set the course
+      const course = courses.find(c => c.id.toString() === courseId.toString());
+      if (course) {
+        setSelectedCourse(course);
+        
+        // Find and set the chapter
+        const chapter = course.chapters?.find(ch => ch.id.toString() === chapterId.toString());
+        if (chapter) {
+          setSelectedChapter(chapter);
+        }
+      }
+    }
+    
+    // Set the question text if provided and clear any existing answer
+    if (questionText && typeof questionText === 'string') {
+      setQuestion(questionText);
+      setAnswer(''); // Clear any existing answer
+      setError(null); // Clear any existing error
+    }
+  }, [courses, courseId, chapterId, questionText]);
 
   const onRefresh = useCallback(() => {
     if (!user) return;
@@ -139,6 +166,13 @@ export default function AssistantScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>AI Learning Assistant</Text>
             <Text style={styles.subtitle}>Your personal study companion</Text>
+            {(courseId || chapterId || questionText) && (
+              <View style={styles.autopopulatedBanner}>
+                <Text style={styles.autopopulatedText}>
+                  🎯 Pre-filled from Questions screen
+                </Text>
+              </View>
+            )}
           </View>
           
           <View style={styles.section}>
@@ -248,6 +282,24 @@ export default function AssistantScreen() {
             >
               {loading ? 'Thinking...' : 'Ask Question'}
             </Button>
+            
+            {/* Clear button when auto-populated */}
+            {(courseId || chapterId || questionText) && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => {
+                  setSelectedCourse(null);
+                  setSelectedChapter(null);
+                  setQuestion('');
+                  setAnswer('');
+                  setError(null);
+                  // Navigate back to clean assistant without parameters
+                  router.replace('/assistant');
+                }}
+              >
+                <Text style={styles.clearButtonText}>🗑️ Clear Form</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {loading && (
@@ -573,6 +625,35 @@ const styles = StyleSheet.create({
   warningText: {
     color: '#856404',
     fontSize: 14,
+    fontWeight: '500',
+  },
+  autopopulatedBanner: {
+    backgroundColor: Colors.light.primary + '10',
+    borderColor: Colors.light.primary,
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.light.primary,
+  },
+  autopopulatedText: {
+    color: Colors.light.primary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  clearButton: {
+    marginTop: 12,
+    borderRadius: 8,
+    paddingVertical: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.light.gray,
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: Colors.light.gray,
     fontWeight: '500',
   },
 }); 
