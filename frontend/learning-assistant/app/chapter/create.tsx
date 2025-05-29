@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import authService from '@/services/authService';
@@ -64,39 +64,56 @@ export default function CreateChapterScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity 
-                    style={styles.backButton}
-                    onPress={() => router.back()}
-                >
-                    <Text style={styles.backButtonText}>← Back</Text>
-                </TouchableOpacity>
-                <Text style={styles.title}>Create New Chapter</Text>
-            </View>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                style={styles.keyboardAvoidingView}
+            >
+                <View style={styles.header}>
+                    <TouchableOpacity 
+                        style={styles.backButton}
+                        onPress={() => router.back()}
+                    >
+                        <Text style={styles.backButtonText}>← Back</Text>
+                    </TouchableOpacity>
+                    <View style={styles.headerContent}>
+                        <Text style={styles.title}>📖 Create New Chapter</Text>
+                        <Text style={styles.subtitle}>Add a new chapter to organize your learning content</Text>
+                    </View>
+                </View>
 
-            <View style={styles.form}>
-                <Text style={styles.label}>Chapter Title</Text>
-                <TextInput
-                    style={styles.input}
-                    value={title}
-                    onChangeText={setTitle}
-                    placeholder="Enter chapter title"
-                    placeholderTextColor="#999"
-                />
+                <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>📝 Chapter Details</Text>
+                        
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Chapter Title</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={title}
+                                onChangeText={setTitle}
+                                placeholder="Enter chapter title (e.g., Introduction to React)"
+                                placeholderTextColor="#999"
+                                autoFocus={true}
+                                maxLength={100}
+                            />
+                            <Text style={styles.helperText}>Choose a clear and descriptive title for your chapter</Text>
+                        </View>
 
-                <TouchableOpacity 
-                    style={[
-                        styles.submitButton,
-                        loading && styles.submitButtonDisabled
-                    ]}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                >
-                    <Text style={styles.submitButtonText}>
-                        {loading ? 'Creating...' : 'Create Chapter'}
-                    </Text>
-                </TouchableOpacity>
-            </View>
+                        <TouchableOpacity 
+                            style={[
+                                styles.submitButton,
+                                (!title.trim() || loading) && styles.submitButtonDisabled
+                            ]}
+                            onPress={handleSubmit}
+                            disabled={!title.trim() || loading}
+                        >
+                            <Text style={styles.submitButtonText}>
+                                {loading ? '✨ Creating Chapter...' : '🚀 Create Chapter'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -104,56 +121,133 @@ export default function CreateChapterScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
+    },
+    keyboardAvoidingView: {
+        flex: 1,
     },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        padding: 16,
+        borderBottomColor: '#f0f0f0',
+        paddingTop: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     backButton: {
-        marginBottom: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        marginBottom: 8,
     },
     backButtonText: {
         fontSize: 16,
         color: '#007AFF',
+        fontWeight: '600',
+    },
+    headerContent: {
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingBottom: 24,
     },
     title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
     },
-    form: {
-        padding: 16,
+    subtitle: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
+    },
+    scrollView: {
+        flex: 1,
+        backgroundColor: '#f8f9fa',
+    },
+    scrollContent: {
+        padding: 20,
+        paddingBottom: 40,
+    },
+    section: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+    },
+    sectionTitle: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 20,
+        letterSpacing: 0.3,
+    },
+    inputGroup: {
+        marginBottom: 24,
     },
     label: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: '#1a1a1a',
         marginBottom: 8,
+        letterSpacing: 0.2,
     },
     input: {
         backgroundColor: '#fff',
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 12,
+        padding: 18,
         fontSize: 16,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        marginBottom: 20,
+        borderWidth: 2,
+        borderColor: '#e9ecef',
+        marginBottom: 8,
+        color: '#1a1a1a',
+        fontWeight: '500',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    helperText: {
+        fontSize: 14,
+        color: '#666',
+        fontStyle: 'italic',
+        fontWeight: '400',
     },
     submitButton: {
         backgroundColor: '#007AFF',
-        padding: 16,
-        borderRadius: 8,
+        paddingVertical: 18,
+        paddingHorizontal: 24,
+        borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#007AFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     submitButtonDisabled: {
-        opacity: 0.7,
+        backgroundColor: '#ccc',
+        shadowOpacity: 0,
+        elevation: 0,
     },
     submitButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
 }); 
