@@ -296,6 +296,41 @@ def summarize_text(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def get_pdf_info(request):
+    """Get basic information about a PDF file before processing"""
+    try:
+        file = request.FILES.get('file')
+        
+        if not file:
+            return Response({'error': 'No file provided'}, status=400)
+        
+        if not file.name.endswith('.pdf'):
+            return Response({'error': 'Only PDF files are supported'}, status=400)
+
+        file_content = file.read()
+        
+        # Get basic PDF info
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+        total_pages = len(pdf_reader.pages)
+        
+        # Get some sample text from first page
+        sample_text = ""
+        if total_pages > 0:
+            first_page = pdf_reader.pages[0]
+            sample_text = first_page.extract_text()[:300] + "..." if len(first_page.extract_text()) > 300 else first_page.extract_text()
+
+        return Response({
+            'fileName': file.name,
+            'totalPages': total_pages,
+            'sampleText': sample_text,
+            'maxAllowedPages': 10
+        })
+
+    except Exception as e:
+        return Response({'error': f'Error reading PDF: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def upload_document(request):
     try:
         file = request.FILES.get('file')
@@ -305,6 +340,10 @@ def upload_document(request):
         new_course_title = request.data.get('newCourseTitle')
         new_chapter_title = request.data.get('newChapterTitle')
         force_upload = request.data.get('forceUpload', False)
+        
+        # New page range parameters
+        start_page = request.data.get('startPage')
+        end_page = request.data.get('endPage')
 
         if not file:
             return Response({'error': 'No file provided'}, status=400)
@@ -312,17 +351,36 @@ def upload_document(request):
         if not file.name.endswith('.pdf'):
             return Response({'error': 'Only PDF files are supported'}, status=400)
 
-        # Generate a cache key based on file content
+        # Validate page range if provided
+        if start_page is not None and end_page is not None:
+            try:
+                start_page = int(start_page)
+                end_page = int(end_page)
+                
+                if start_page < 1:
+                    return Response({'error': 'Start page must be 1 or greater'}, status=400)
+                
+                if end_page < start_page:
+                    return Response({'error': 'End page must be greater than or equal to start page'}, status=400)
+                
+                if end_page - start_page + 1 > 10:
+                    return Response({'error': 'Maximum 10 pages allowed'}, status=400)
+                    
+            except ValueError:
+                return Response({'error': 'Invalid page numbers'}, status=400)
+
+        # Generate a cache key based on file content and page range
         file_content = file.read()
-        cache_key = f"pdf_content_{get_random_string(32)}"
+        page_range_key = f"_{start_page}_{end_page}" if start_page and end_page else ""
+        cache_key = f"pdf_content_{get_random_string(32)}{page_range_key}"
         
         # Try to get cached content
         cached_data = cache.get(cache_key)
         if cached_data:
             final_html, image_info = cached_data
         else:
-            # Process the PDF and cache the results
-            final_html, image_info = process_pdf(file_content)
+            # Process the PDF with page range and cache the results
+            final_html, image_info = process_pdf(file_content, start_page, end_page)
             cache.set(cache_key, (final_html, image_info), timeout=3600)  # Cache for 1 hour
 
         # Create new course if requested
@@ -416,7 +474,7 @@ def upload_document(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
-def process_pdf(file_content):
+def process_pdf(file_content, start_page=None, end_page=None):
     """Process PDF content and return HTML and image information."""
     pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
     html_content = []
@@ -425,14 +483,31 @@ def process_pdf(file_content):
     in_paragraph = False
     last_y = None
     last_text = ""
-    max_pages = 50
+    
+    total_pages = len(pdf_reader.pages)
+    
+    # Set default page range if not provided
+    if start_page is None:
+        start_page = 1
+    if end_page is None:
+        end_page = min(total_pages, 10)  # Default to first 10 pages max
+    
+    # Validate page range against actual PDF
+    if start_page > total_pages:
+        start_page = total_pages
+    if end_page > total_pages:
+        end_page = total_pages
+    
+    # Convert to 0-based indexing for processing
+    start_idx = start_page - 1
+    end_idx = end_page - 1
 
-    # Extract text
-    for page_num, page in enumerate(pdf_reader.pages):
-        if page_num >= max_pages:
-            html_content.append("<p>[Document truncated due to length. Only first 50 pages are shown.]</p>")
+    # Extract text only from selected pages
+    for page_num in range(start_idx, end_idx + 1):
+        if page_num >= total_pages:
             break
 
+        page = pdf_reader.pages[page_num]
         page_text = ""
         
         def visitor_body(text, cm, tm, font_dict, font_size):
@@ -486,17 +561,17 @@ def process_pdf(file_content):
         
         html_content.append(page_text)
 
-    final_html = f"<div class='pdf-content'>\n{''.join(html_content)}</div>"
+    final_html = f"<div class='pdf-content'>\n<p><em>Pages {start_page}-{end_page} of {total_pages}</em></p>\n{''.join(html_content)}</div>"
 
-    # Extract images
+    # Extract images only from selected pages
     image_info = []
     max_images = 20
     min_size = 100
 
     pdf_document = fitz.open(stream=file_content, filetype="pdf")
     
-    for page_num in range(pdf_document.page_count):
-        if len(image_info) >= max_images:
+    for page_num in range(start_idx, end_idx + 1):
+        if len(image_info) >= max_images or page_num >= pdf_document.page_count:
             break
             
         page = pdf_document[page_num]
@@ -612,12 +687,13 @@ class HuggingFaceConversationalAPI(Runnable):
             payload = {
                 "inputs": prompt,
                 "parameters": {
-                    "max_new_tokens": 600,  # Increased significantly for more complete question generation
-                    "temperature": 0.5,     # Slightly higher for more creativity
-                    "repetition_penalty": 1.3,  # Higher to avoid repetition
+                    "max_new_tokens": 600,     # Increased from 200 for question generation
+                    "temperature": 0.3,        # Lower temperature for more consistent answers
+                    "repetition_penalty": 1.1, # Reduced to avoid over-penalizing for questions
                     "do_sample": True,
-                    "top_p": 0.9,          # Higher for more diverse responses
-                    "return_full_text": False
+                    "top_p": 0.85,             # Slightly more focused
+                    "return_full_text": False,
+                    "stop": ["Question:", "Context:", "Student Question:"]  # Removed aggressive stops
                 }
             }
             
@@ -665,6 +741,12 @@ def clean_repetitive_text(text):
     """Remove repetitive patterns from the generated text"""
     import re
     
+    if not text:
+        return ""
+    
+    # Remove common prefixes that the LLM might add
+    text = re.sub(r'^(Answer:\s*|Response:\s*|Based on the context[,:\s]*)', '', text, flags=re.IGNORECASE)
+    
     # Remove repeated phrases (3+ words repeated)
     text = re.sub(r'\b(\w+(?:\s+\w+){2,})\s+(?:\1\s*){2,}', r'\1', text, flags=re.IGNORECASE)
     
@@ -679,24 +761,66 @@ def clean_repetitive_text(text):
             unique_sentences.append(sentence)
             seen.add(sentence.lower())
     
-    # Remove common repetitive patterns
+    # Remove common repetitive patterns and artifacts
     cleaned_text = '. '.join(unique_sentences)
     cleaned_text = re.sub(r'(Source:\s*Context[.\s]*)+', '', cleaned_text, flags=re.IGNORECASE)
     cleaned_text = re.sub(r'(Answer:\s*)+', '', cleaned_text, flags=re.IGNORECASE)
+    cleaned_text = re.sub(r'(Based on the context[,:\s]*)+', '', cleaned_text, flags=re.IGNORECASE)
+    cleaned_text = re.sub(r'(According to the provided information[,:\s]*)+', '', cleaned_text, flags=re.IGNORECASE)
     cleaned_text = re.sub(r'\.{3,}', '...', cleaned_text)  # Replace multiple dots
     cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Remove extra whitespace
+    
+    # Clean up any leading/trailing periods or colons
+    cleaned_text = re.sub(r'^[.:\s]+|[.:\s]+$', '', cleaned_text.strip())
     
     return cleaned_text.strip()
 
 def format_docs(docs: Iterable[LCDocument]):
-    # Limit context to 1200 characters for faster processing
-    context = "\n\n".join(doc.page_content for doc in docs)
-    return context[:1200] + "..." if len(context) > 1200 else context
+    # Increase context limit for better coverage and add better formatting
+    context_parts = []
+    total_length = 0
+    max_context_length = 3000  # Balanced context size for better performance
+    
+    docs_list = list(docs)  # Convert to list to check length
+    print(f"DEBUG: format_docs received {len(docs_list)} documents")
+    
+    if len(docs_list) == 0:
+        print("DEBUG: No documents provided to format_docs")
+        return "No relevant content found."
+    
+    for i, doc in enumerate(docs_list):
+        content = doc.page_content.strip()
+        print(f"DEBUG: Processing doc {i+1}, content length: {len(content)}")
+        if content and total_length + len(content) <= max_context_length:
+            context_parts.append(f"Section {i+1}:\n{content}")
+            total_length += len(content)
+        elif content and total_length < max_context_length:
+            # Add partial content if it fits
+            remaining_space = max_context_length - total_length - 20  # Leave some buffer
+            if remaining_space > 100:  # Only add if there's meaningful space
+                truncated_content = content[:remaining_space] + "..."
+                context_parts.append(f"Section {i+1}:\n{truncated_content}")
+            break
+        else:
+            break
+    
+    result = "\n\n".join(context_parts) if context_parts else "No relevant content found."
+    print(f"DEBUG: format_docs returning {len(result)} characters")
+    return result
 
-# Initialize text splitter
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=600,      # Smaller chunks for faster processing
-    chunk_overlap=100,   # Reduced overlap
+# Initialize text splitters
+# For assistant - larger chunks for better context
+assistant_text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1200,     # Large chunks for comprehensive context
+    chunk_overlap=200,   # Good overlap for continuity
+    separators=["\n\n", "\n", ". ", " ", ""],
+)
+
+# For question generation - smaller chunks for focused questions
+question_text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=600,      # Smaller chunks for focused question generation
+    chunk_overlap=100,   # Moderate overlap
+    separators=["\n\n", "\n", ". ", " ", ""],
 )
 
 @api_view(['POST'])
@@ -748,14 +872,14 @@ def ask_question(request):
         print(f"DEBUG: Clean text length: {len(clean_text)}")
 
         # Limit content for question generation (to avoid token limits and speed up processing)
-        max_content_length = 4000  # Increased from 1500 to use more context
+        max_content_length = 6000  # Balanced for assistant performance
         if len(clean_text) > max_content_length:
             clean_text = clean_text[:max_content_length] + "..."
         
         # Create document splits
         print("DEBUG: Creating document splits...")
         docs = [LCDocument(page_content=clean_text)]
-        splits = text_splitter.split_documents(docs)
+        splits = assistant_text_splitter.split_documents(docs)
         print(f"DEBUG: Created {len(splits)} document splits")
 
         # Create vector store using FAISS
@@ -765,17 +889,32 @@ def ask_question(request):
 
         # Create retriever
         print("DEBUG: Creating retriever...")
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})  # Only get top 3 most relevant chunks
+        retriever = vectorstore.as_retriever(
+            search_type="similarity", 
+            search_kwargs={
+                "k": 8,  # Increased from 5 to get even more context
+            }
+        )
         print("DEBUG: Retriever created successfully")
 
         # Create prompt template
         print("DEBUG: Creating prompt template...")
         prompt = PromptTemplate.from_template(
-            """[Context] {context}
+            """You are a helpful learning assistant. Use the provided context to answer the student's question clearly and concisely.
 
-[Question] {question}
+Context:
+{context}
 
-Please provide a clear, concise answer based on the context above. Keep your response under 100 words and avoid repeating information."""
+Student Question: {question}
+
+Instructions:
+- Answer the question directly using ONLY the information from the context above
+- Keep your response clear and focused (under 150 words)
+- If the context doesn't contain relevant information, say "I don't have enough information in the provided material to answer this question accurately. Please check if this topic is covered in the current chapter or try asking about a different aspect."
+- Do NOT start your response with "Answer:" or similar prefixes
+- Write in a conversational, helpful tone as if explaining to a student
+
+Answer:"""
         )
         print("DEBUG: Prompt template created successfully")
 
@@ -788,6 +927,26 @@ Please provide a clear, concise answer based on the context above. Keep your res
             | StrOutputParser()
         )
         print("DEBUG: RAG chain created successfully")
+        
+        # Debug: Test retrieval quality
+        print("DEBUG: Testing retrieval...")
+        retrieved_docs = []
+        try:
+            retrieved_docs = retriever.invoke(question)
+            print(f"DEBUG: Retrieved {len(retrieved_docs)} documents")
+            if len(retrieved_docs) == 0:
+                print("DEBUG: No documents retrieved - this is the problem!")
+                print(f"DEBUG: Original content length: {len(clean_text)}")
+                print(f"DEBUG: Number of splits: {len(splits)}")
+                for i, split in enumerate(splits[:3]):  # Show first 3 splits
+                    print(f"DEBUG: Split {i+1} length: {len(split.page_content)}")
+                    print(f"DEBUG: Split {i+1} preview: {split.page_content[:200]}...")
+            else:
+                for i, doc in enumerate(retrieved_docs[:3]):  # Show first 3 docs
+                    print(f"DEBUG: Doc {i+1} length: {len(doc.page_content)}")
+                    print(f"DEBUG: Doc {i+1} preview: {doc.page_content[:100]}...")
+        except Exception as e:
+            print(f"DEBUG: Retrieval test failed: {e}")
 
         # Get answer
         print(f"DEBUG: Invoking RAG chain with question: {question}")
@@ -799,13 +958,50 @@ Please provide a clear, concise answer based on the context above. Keep your res
             end_time = time.time()
             print(f"DEBUG: RAG chain completed in {end_time - start_time:.2f} seconds")
             print(f"DEBUG: Got answer: {answer}")
+            
+            # Check if we got a "no relevant content" response and try direct approach
+            if ("no relevant content" in answer.lower() or 
+                "don't have enough information" in answer.lower() or 
+                len(retrieved_docs) == 0):
+                print("DEBUG: RAG returned no content, trying direct approach...")
+                
+                # Use the original content directly with a simpler prompt
+                direct_context = clean_text[:3000]  # Balanced context size
+                direct_prompt = f"""Based on the following material, answer the student's question clearly and concisely.
+
+Material:
+{direct_context}
+
+Student Question: {question}
+
+Please provide a helpful answer based on the material above. If the specific information isn't in the material, say so politely.
+
+Answer:"""
+                
+                direct_answer = llm.invoke(direct_prompt)
+                print(f"DEBUG: Direct approach answer: {direct_answer}")
+                answer = direct_answer
+            
+            # Validate the answer quality
+            if not answer or len(answer.strip()) < 10:
+                print("DEBUG: Answer too short, trying fallback...")
+                raise Exception("Answer too short or empty")
+                
         except Exception as llm_error:
             print(f"DEBUG: LLM invocation failed: {str(llm_error)}")
             print(f"DEBUG: LLM error type: {type(llm_error).__name__}")
             # Try a simpler approach without RAG
             print("DEBUG: Trying simple LLM call without RAG...")
             try:
-                simple_prompt = f"Based on the following context, answer this question: {question}\n\nContext: {clean_text[:2000]}..."
+                simple_prompt = f"""You are a helpful learning assistant. Answer the student's question based on the provided material.
+
+Material: {clean_text[:3500]}
+
+Student Question: {question}
+
+Please provide a clear, helpful answer. If the material doesn't contain enough information to answer the question, say "I don't have enough information in the provided material to answer this question accurately."
+
+Answer:"""
                 answer = llm.invoke(simple_prompt)
                 print(f"DEBUG: Simple LLM call succeeded: {answer}")
             except Exception as simple_error:
@@ -814,8 +1010,12 @@ Please provide a clear, concise answer based on the context above. Keep your res
                     'error': f'AI model is currently unavailable: {str(simple_error)}'
                 }, status=503)
 
-        # Clean repetitive text
+        # Clean repetitive text and validate
         cleaned_answer = clean_repetitive_text(answer)
+        
+        # Final validation
+        if not cleaned_answer or len(cleaned_answer.strip()) < 5:
+            cleaned_answer = "I apologize, but I'm having trouble processing your question right now. Please try rephrasing your question or check if the topic is covered in the current chapter."
 
         return Response({
             'answer': cleaned_answer
@@ -884,10 +1084,9 @@ def generate_questions(request):
         
         # Try multiple attempts with different sections of text if needed
         attempts = [
-            {"start": 0, "length": 1500, "description": "first section (1500 chars)"},
-            {"start": 1500, "length": 2000, "description": "second section (2000 chars)"}, 
-            {"start": 3500, "length": 4000, "description": "third section (4000 chars)"},
-            {"start": 7500, "length": 4000, "description": "fourth section (4000 chars)"}
+            {"start": 0, "length": 1200, "description": "first section (1200 chars)"},
+            {"start": 1200, "length": 1500, "description": "second section (1500 chars)"}, 
+            {"start": 2700, "length": 1800, "description": "third section (1800 chars)"},
         ]
         
         parsed_questions = []
@@ -914,138 +1113,75 @@ def generate_questions(request):
             
             # Create question generation prompt based on type
             if question_type == 'true_false':
-                question_prompt = f"""Based on this text, create {question_count} TRUE/FALSE questions that test understanding of key facts and concepts:
+                question_prompt = f"""Create {min(question_count, 5)} TRUE/FALSE questions from this text:
 
-TEXT:
 {attempt_text}
 
-INSTRUCTIONS: Create statements that are either clearly true or clearly false based on the text. IMPORTANT: Mix true and false answers - make some True and some False. Follow the EXACT format below.
-
-REQUIRED FORMAT (copy exactly):
-Q1: [Your statement here]
-Type: true_false
-Answer: [True or False]
-
-Q2: [Your statement here]
-Type: true_false
-Answer: [True or False]
-
-EXAMPLE:
-Q1: The main concept discussed in the text is machine learning
+Format exactly:
+Q1: [Statement here]
 Type: true_false
 Answer: True
 
-Q2: The text states that artificial intelligence was invented in 2020
+Q2: [Statement here] 
 Type: true_false
 Answer: False
 
-Q3: According to the text, this technology is widely used
-Type: true_false
-Answer: True
-
-Q4: The document mentions that the process is completely automated
-Type: true_false
-Answer: False
-
-NOW CREATE {question_count} QUESTIONS WITH MIXED TRUE/FALSE ANSWERS FOLLOWING THIS EXACT FORMAT:"""
+Make some True and some False. Keep questions clear and simple."""
 
             elif question_type == 'short_answer':
-                question_prompt = f"""Based on this text, create {question_count} SHORT ANSWER questions that test comprehension of key concepts:
+                question_prompt = f"""Create {min(question_count, 5)} SHORT ANSWER questions from this text:
 
-TEXT:
 {attempt_text}
 
-INSTRUCTIONS: Ask about definitions, explanations, or key points from the text. Provide concise but informative answers. Follow the EXACT format below.
-
-REQUIRED FORMAT (copy exactly):
-Q1: [Your question here]
+Format exactly:
+Q1: [Question here]
 Type: short_answer
-Answer: [Your answer here]
+Answer: [Answer here]
 
-Q2: [Your question here]
+Q2: [Question here]
 Type: short_answer
-Answer: [Your answer here]
+Answer: [Answer here]
 
-EXAMPLE:
-Q1: What is the main purpose of the concept discussed?
-Type: short_answer
-Answer: The main purpose is to solve complex problems using data-driven approaches
-
-Q2: How does this process work according to the text?
-Type: short_answer
-Answer: The process works by analyzing patterns and making predictions based on historical data
-
-NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+Keep questions and answers concise."""
 
             elif question_type == 'multiple_choice':
-                question_prompt = f"""Based on this text, create {question_count} MULTIPLE CHOICE questions with exactly 4 options each:
+                question_prompt = f"""Create {min(question_count, 4)} MULTIPLE CHOICE questions from this text:
 
-TEXT:
 {attempt_text}
 
-INSTRUCTIONS: Create questions about key facts, concepts, or details from the text. Make options plausible but only one correct. Follow the EXACT format below.
-
-REQUIRED FORMAT (copy exactly):
-Q1: [Your question here]
+Format exactly:
+Q1: [Question here]
 Type: multiple_choice
-Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
-Answer: [A, B, C, or D]
-
-Q2: [Your question here]
-Type: multiple_choice
-Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
-Answer: [A, B, C, or D]
-
-EXAMPLE:
-Q1: According to the text, what is the primary benefit of this approach?
-Type: multiple_choice
-Options: A) Increased efficiency and accuracy B) Reduced costs only C) Better user interface D) Faster processing speed
+Options: A) [Option A] B) [Option B] C) [Option C] D) [Option D]
 Answer: A
 
-Q2: Which method is mentioned as most effective?
+Q2: [Question here]
 Type: multiple_choice
-Options: A) Traditional methods B) Machine learning algorithms C) Manual processing D) Statistical analysis
+Options: A) [Option A] B) [Option B] C) [Option C] D) [Option D]
 Answer: B
 
-NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+Keep questions clear and options concise."""
 
             else:  # mixed type
-                question_prompt = f"""Based on this text, create {question_count} MIXED TYPE questions (multiple choice, true/false, and short answer):
+                question_prompt = f"""Create {min(question_count, 4)} MIXED questions from this text:
 
-TEXT:
 {attempt_text}
 
-INSTRUCTIONS: Create a variety of question types that test different aspects of understanding. Follow the EXACT format below.
-
-REQUIRED FORMAT (copy exactly):
-Q1: [Your question here]
+Format exactly:
+Q1: [Question here]
 Type: multiple_choice
-Options: A) [Option A text] B) [Option B text] C) [Option C text] D) [Option D text]
-Answer: [A, B, C, or D]
+Options: A) [Option A] B) [Option B] C) [Option C] D) [Option D]
+Answer: A
 
-Q2: [Your question here]
-Type: true_false
-Answer: [True or False]
-
-Q3: [Your question here]
-Type: short_answer
-Answer: [Your answer here]
-
-EXAMPLE:
-Q1: What is the main advantage mentioned in the text?
-Type: multiple_choice
-Options: A) Cost reduction B) Improved accuracy C) Faster processing D) Better design
-Answer: B
-
-Q2: The text states that this technology is widely adopted in healthcare
+Q2: [Statement here]
 Type: true_false
 Answer: True
 
-Q3: How does this system improve performance?
+Q3: [Question here]
 Type: short_answer
-Answer: The system improves performance by optimizing algorithms and reducing computational overhead
+Answer: [Answer here]
 
-NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
+Mix the types and keep everything concise."""
 
             # Generate questions using the LLM
             try:
@@ -1065,20 +1201,23 @@ NOW CREATE {question_count} QUESTIONS FOLLOWING THIS EXACT FORMAT:"""
                 print(f"DEBUG: Using raw LLM response for parsing (attempt {attempt_num})")
                 
                 # Parse the questions into structured format
-                parsed_questions = parse_questions(questions_response)
+                new_questions = parse_questions(questions_response)
                 
-                print(f"DEBUG: Parsed {len(parsed_questions)} questions from LLM (attempt {attempt_num})")
+                print(f"DEBUG: Parsed {len(new_questions)} questions from LLM (attempt {attempt_num})")
+                
+                # Add the new questions to our list, updating their IDs to avoid conflicts
+                for new_question in new_questions:
+                    new_question['id'] = len(parsed_questions) + 1
+                    parsed_questions.append(new_question)
+                
+                print(f"DEBUG: Total questions accumulated: {len(parsed_questions)}")
                 
                 # Check if we have enough questions
                 if len(parsed_questions) >= question_count:
                     print(f"DEBUG: Got enough questions ({len(parsed_questions)}) on attempt {attempt_num}, stopping")
                     break
-                elif len(parsed_questions) > 0:
-                    print(f"DEBUG: Got {len(parsed_questions)} questions on attempt {attempt_num}, need {question_count}, trying next attempt")
-                    # Keep the questions we got and try again for more
-                    continue
                 else:
-                    print(f"DEBUG: Got 0 questions on attempt {attempt_num}, trying next attempt")
+                    print(f"DEBUG: Got {len(parsed_questions)} total questions after attempt {attempt_num}, need {question_count}, trying next attempt")
                     continue
                     
             except Exception as llm_error:
