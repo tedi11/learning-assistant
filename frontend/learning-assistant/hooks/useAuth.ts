@@ -25,11 +25,16 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     try {
       const token = await authService.getToken();
       if (token) {
+        // Try to get current user - the api interceptor will handle token refresh if needed
         const response = await authService.getCurrentUser();
         setUser(response.data);
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
+    } catch (error: any) {
+      // Only log non-401 errors to reduce noise
+      if (error.response?.status !== 401) {
+        console.error('Auth check failed:', error);
+      }
+      // Clear invalid tokens silently
       await authService.logout();
     } finally {
       setLoading(false);

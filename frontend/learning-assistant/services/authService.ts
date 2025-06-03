@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { api } from './api'; // Import the configured api instance
 
 // Get the correct API URL based on platform
 const getApiUrl = () => {
@@ -91,7 +92,7 @@ class AuthService {
             throw new Error('No refresh token found');
         }
 
-        const response = await axios.post(`${API_URL}/token/refresh/`, {
+        const response = await axios.post(`${API_URL}/login/refresh/`, {
             refresh: refreshToken,
         });
 
@@ -153,12 +154,8 @@ class AuthService {
     }
 
     async getCurrentUser(): Promise<AxiosResponse<UserProfile>> {
-        const token = await AsyncStorage.getItem('token');
-        return axios.get<UserProfile>(`${API_URL}/profile/`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        // Use the api instance instead of direct axios to benefit from interceptors
+        return api.get<UserProfile>('/profile/');
     }
 }
 

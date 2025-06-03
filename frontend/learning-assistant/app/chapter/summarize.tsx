@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import RenderHtml from 'react-native-render-html';
 import authService from '@/services/authService';
+import { api } from '@/services/api';
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -17,6 +18,98 @@ interface Chapter {
         summary: string | null;
     }>;
 }
+
+interface SummaryLengthModalProps {
+    visible: boolean;
+    onClose: () => void;
+    onSelect: (length: 'short' | 'medium' | 'long') => void;
+    textLength: number;
+}
+
+const SummaryLengthModal: React.FC<SummaryLengthModalProps> = ({ visible, onClose, onSelect, textLength }) => {
+    const wordCount = Math.round(textLength / 5); // Rough estimation: 5 chars per word
+
+    const lengthOptions = [
+        {
+            key: 'short' as const,
+            title: '📝 Short Summary',
+            description: 'Quick overview of key points',
+            estimatedWords: `~${Math.round(wordCount * 0.12)} words`,
+            percentage: '10-15%',
+            icon: '⚡',
+            color: '#34C759'
+        },
+        {
+            key: 'medium' as const,
+            title: '📖 Medium Summary',
+            description: 'Balanced coverage of main topics',
+            estimatedWords: `~${Math.round(wordCount * 0.20)} words`,
+            percentage: '15-25%',
+            icon: '⚖️',
+            color: '#007AFF'
+        },
+        {
+            key: 'long' as const,
+            title: '📚 Detailed Summary',
+            description: 'Comprehensive overview with details',
+            estimatedWords: `~${Math.round(wordCount * 0.30)} words`,
+            percentage: '25-35%',
+            icon: '🔍',
+            color: '#FF9500'
+        }
+    ];
+
+    return (
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={visible}
+            onRequestClose={onClose}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.summaryModalContent}>
+                    <View style={styles.summaryModalHeader}>
+                        <Text style={styles.summaryModalTitle}>📊 Choose Summary Length</Text>
+                        <Text style={styles.summaryModalSubtitle}>
+                            Original text: ~{wordCount} words
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.summaryModalCloseButton}
+                            onPress={onClose}
+                        >
+                            <Ionicons name="close" size={20} color="#666" />
+                        </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.summaryOptionsContainer}>
+                        {lengthOptions.map((option) => (
+                            <TouchableOpacity
+                                key={option.key}
+                                style={[styles.summaryOption, { borderColor: option.color }]}
+                                onPress={() => onSelect(option.key)}
+                            >
+                                <View style={styles.summaryOptionHeader}>
+                                    <Text style={styles.summaryOptionIcon}>{option.icon}</Text>
+                                    <Text style={[styles.summaryOptionTitle, { color: option.color }]}>
+                                        {option.title}
+                                    </Text>
+                                </View>
+                                <Text style={styles.summaryOptionDescription}>
+                                    {option.description}
+                                </Text>
+                                <View style={styles.summaryOptionStats}>
+                                    <Text style={styles.summaryOptionEstimate}>
+                                        {option.estimatedWords} ({option.percentage} of original)
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+};
 
 const ZoomModal = React.memo(({ 
     visible, 
@@ -94,7 +187,9 @@ export default function SummarizeScreen() {
     const [summarizing, setSummarizing] = useState(false);
     const [summary, setSummary] = useState<string | null>(null);
     const [showZoomModal, setShowZoomModal] = useState(false);
+    const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [textScale, setTextScale] = useState(1);
+    const [summaryStats, setSummaryStats] = useState<any>(null);
 
     const fetchChapter = useCallback(async () => {
         try {
@@ -104,7 +199,7 @@ export default function SummarizeScreen() {
                 return;
             }
 
-            const response = await axios.get(`http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/`, {
+            const response = await api.get(`/courses/${courseId}/chapters/${chapterId}/`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -121,7 +216,7 @@ export default function SummarizeScreen() {
         }
     }, [courseId, chapterId]);
 
-    const handleSummarize = async () => {
+    const handleSummarize = async (summaryLength: 'short' | 'medium' | 'long' = 'medium', forceRegenerate: boolean = false) => {
         try {
             setSummarizing(true);
             const token = await authService.getToken();
@@ -130,14 +225,14 @@ export default function SummarizeScreen() {
                 return;
             }
 
-            const response = await axios.post(
-                'http://192.168.1.135:8000/api/summarize/',
+            const response = await api.post(
+                '/summarize/',
                 {
                     text: initialContent,
                     courseId,
                     chapterId,
-                    min_length: 100,
-                    max_length: 500
+                    summaryLength,
+                    forceRegenerate
                 },
                 {
                     headers: {
@@ -148,20 +243,56 @@ export default function SummarizeScreen() {
 
             if (response.data.summary) {
                 setSummary(response.data.summary);
+                setSummaryStats(response.data.summaryStats);
             } else {
                 throw new Error('No summary was generated');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error summarizing text:', error);
-            let errorMessage = 'Failed to summarize the text. Please try again.';
-            if (axios.isAxiosError(error) && error.response?.data?.error) {
-                errorMessage = `Error: ${error.response.data.error}`;
+            
+            if (axios.isAxiosError(error) && error.response?.data?.error === 'TEXT_TOO_SHORT') {
+                const errorData = error.response.data;
+                Alert.alert(
+                    'Text Too Short',
+                    `Sorry, this text is too short to generate a meaningful summary.\n\nMinimum required: ${errorData.minLength} characters\nCurrent text: ${errorData.textLength} characters\n\nPlease add more content to this chapter before generating a summary.`,
+                    [{ text: 'OK' }]
+                );
+            } else {
+                let errorMessage = 'Failed to summarize the text. Please try again.';
+                if (axios.isAxiosError(error) && error.response?.data?.error) {
+                    errorMessage = `Error: ${error.response.data.error}`;
+                }
+                Alert.alert('Error', errorMessage);
             }
-            Alert.alert('Error', errorMessage);
             setSummary(null);
         } finally {
             setSummarizing(false);
         }
+    };
+
+    const handleSummaryLengthSelect = (length: 'short' | 'medium' | 'long') => {
+        setShowSummaryModal(false);
+        handleSummarize(length, true); // Force regenerate when user selects length
+    };
+
+    const showSummaryOptions = () => {
+        if (!initialContent || typeof initialContent !== 'string') {
+            Alert.alert('Error', 'No content available to summarize');
+            return;
+        }
+        
+        // Check if content is long enough (rough check)
+        const cleanText = initialContent.replace(/<[^>]*>/g, '').trim();
+        if (cleanText.length < 500) {
+            Alert.alert(
+                'Text Too Short',
+                `This text is too short to generate a meaningful summary.\n\nMinimum required: 500 characters\nCurrent text: ${cleanText.length} characters\n\nPlease add more content to this chapter before generating a summary.`,
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
+        setShowSummaryModal(true);
     };
 
     useFocusEffect(
@@ -197,7 +328,7 @@ export default function SummarizeScreen() {
                     {!loading && !summarizing && !summary && (
                         <TouchableOpacity
                             style={styles.summarizeButton}
-                            onPress={handleSummarize}
+                            onPress={showSummaryOptions}
                         >
                             <Text style={styles.summarizeButtonText}>🤖 Generate Summary</Text>
                         </TouchableOpacity>
@@ -219,6 +350,13 @@ export default function SummarizeScreen() {
                     setShowZoomModal(false);
                 }}
                 initialScale={textScale}
+            />
+            
+            <SummaryLengthModal
+                visible={showSummaryModal}
+                onClose={() => setShowSummaryModal(false)}
+                onSelect={handleSummaryLengthSelect}
+                textLength={initialContent ? initialContent.length : 0}
             />
             
             <ScrollView 
@@ -302,7 +440,7 @@ export default function SummarizeScreen() {
                         <View style={styles.regenerateContainer}>
                             <TouchableOpacity
                                 style={styles.regenerateButton}
-                                onPress={handleSummarize}
+                                onPress={showSummaryOptions}
                             >
                                 <Text style={styles.regenerateButtonText}>🔄 Regenerate Summary</Text>
                             </TouchableOpacity>
@@ -552,5 +690,87 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         letterSpacing: 0.3,
+    },
+    summaryModalContent: {
+        backgroundColor: '#fff',
+        width: '90%',
+        maxWidth: 400,
+        borderRadius: 20,
+        padding: 28,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
+        zIndex: 2,
+    },
+    summaryModalHeader: {
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    summaryModalTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        textAlign: 'center',
+        letterSpacing: 0.3,
+    },
+    summaryModalSubtitle: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 24,
+    },
+    summaryModalCloseButton: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 20,
+        width: 32,
+        height: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    summaryOptionsContainer: {
+        paddingHorizontal: 4,
+    },
+    summaryOption: {
+        padding: 16,
+        borderWidth: 2,
+        borderColor: '#e9ecef',
+        borderRadius: 12,
+        marginBottom: 12,
+        backgroundColor: '#fafbfc',
+    },
+    summaryOptionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    summaryOptionIcon: {
+        fontSize: 22,
+        marginRight: 12,
+    },
+    summaryOptionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        flex: 1,
+    },
+    summaryOptionDescription: {
+        fontSize: 16,
+        color: '#666',
+        lineHeight: 22,
+        marginBottom: 8,
+    },
+    summaryOptionStats: {
+        marginTop: 8,
+    },
+    summaryOptionEstimate: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
     },
 }); 

@@ -108,6 +108,12 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
+        if (!refreshToken) {
+          // No refresh token available, clear tokens and reject
+          await AsyncStorage.multiRemove(['token', 'refreshToken']);
+          return Promise.reject(error);
+        }
+
         const response = await axios.post(`${BASE_URL}/login/refresh/`, {
           refresh: refreshToken,
         });
@@ -118,9 +124,10 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // If refresh fails, clear tokens and redirect to login
+        console.error('Token refresh failed:', refreshError);
+        // If refresh fails, clear tokens and reject the original error
         await AsyncStorage.multiRemove(['token', 'refreshToken']);
-        return Promise.reject(refreshError);
+        return Promise.reject(error); // Return original error, not refresh error
       }
     }
 
