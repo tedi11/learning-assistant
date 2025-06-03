@@ -214,26 +214,73 @@ def summarize_text(request):
         text = request.data.get('text', '')
         chapter_id = request.data.get('chapterId')
         course_id = request.data.get('courseId')
-        min_length = request.data.get('min_length', 30)
-        max_new_tokens = request.data.get('max_length', 500)  # We'll use this as max_new_tokens
+        summary_length = request.data.get('summaryLength', 'medium')  # 'short', 'medium', 'long'
+        force_regenerate = request.data.get('forceRegenerate', False)  # Allow regenerating existing summaries
         
-        # First check if we already have a summary
+        # Text length threshold - minimum characters needed for summarization
+        MIN_TEXT_LENGTH = 500  # Threshold for minimum text length
+        
+        # First check if we already have a summary and not forcing regeneration
         course = get_object_or_404(Course, id=course_id, owner=request.user)
         chapter = get_object_or_404(Chapter, id=chapter_id, course=course)
         note = Note.objects.filter(chapter=chapter).first()
         
-        if note and note.summary:
+        if note and note.summary and not force_regenerate:
             return Response({
                 'summary': note.summary,
-                'isExisting': True
+                'isExisting': True,
+                'summaryLength': 'existing'
             })
         
-        # If no existing summary, generate a new one
         # Remove HTML tags and clean the text
         soup = BeautifulSoup(text, 'html.parser')
         clean_text = soup.get_text()
         # Remove extra whitespace
         clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+        
+        # Check if text is too short for summarization
+        if len(clean_text) < MIN_TEXT_LENGTH:
+            return Response({
+                'error': 'TEXT_TOO_SHORT',
+                'message': f'Text is too short for summarization. Minimum {MIN_TEXT_LENGTH} characters required, but only {len(clean_text)} characters found.',
+                'textLength': len(clean_text),
+                'minLength': MIN_TEXT_LENGTH
+            }, status=400)
+        
+        # Calculate summary parameters based on text length and desired summary length
+        text_word_count = len(clean_text.split())
+        
+        # Define summary length ratios and limits based on user selection
+        if summary_length == 'short':
+            # Short: 10-15% of original, max 200 words
+            min_ratio = 0.10
+            max_ratio = 0.15
+            max_words = 200
+            max_new_tokens = 250
+        elif summary_length == 'long':
+            # Long: 25-35% of original, max 800 words
+            min_ratio = 0.25
+            max_ratio = 0.35
+            max_words = 800
+            max_new_tokens = 1000
+        else:  # medium (default)
+            # Medium: 15-25% of original, max 500 words
+            min_ratio = 0.15
+            max_ratio = 0.25
+            max_words = 500
+            max_new_tokens = 600
+        
+        # Calculate actual min and max lengths
+        calculated_min = max(30, int(text_word_count * min_ratio))  # At least 30 words
+        calculated_max = min(max_words, int(text_word_count * max_ratio))
+        
+        # Ensure min is less than max
+        if calculated_min >= calculated_max:
+            calculated_min = max(30, calculated_max - 50)
+        
+        print(f"Text word count: {text_word_count}")
+        print(f"Summary length: {summary_length}")
+        print(f"Calculated min: {calculated_min}, max: {calculated_max}")
         
         # Initialize the summarization pipeline and tokenizer
         model_name = "sshleifer/distilbart-cnn-12-6"
@@ -263,9 +310,18 @@ def summarize_text(request):
         # Summarize each chunk and combine
         summaries = []
         for chunk in chunks:
+            chunk_word_count = len(chunk.split())
+            # Calculate proportional min/max for this chunk
+            chunk_min = max(20, int(chunk_word_count * min_ratio))
+            chunk_max = min(int(chunk_word_count * max_ratio), max_new_tokens // len(chunks))
+            
+            # Ensure chunk_min < chunk_max
+            if chunk_min >= chunk_max:
+                chunk_min = max(20, chunk_max - 10)
+            
             chunk_summary = summarizer(chunk, 
-                                    min_length=min(len(chunk.split()) // 4, min_length),
-                                    max_new_tokens=min(len(chunk.split()) // 2, max_new_tokens),
+                                    min_length=chunk_min,
+                                    max_new_tokens=chunk_max,
                                     do_sample=False)[0]['summary_text']
             summaries.append(chunk_summary)
         
@@ -275,8 +331,8 @@ def summarize_text(request):
         # If the combined summary is still too long, summarize it again
         if len(tokenizer.encode(final_summary)) > max_chunk_length:
             final_summary = summarizer(final_summary,
-                                    min_length=min_length,
-                                    max_new_tokens=max_new_tokens,
+                                    min_length=calculated_min,
+                                    max_new_tokens=calculated_max,
                                     do_sample=False)[0]['summary_text']
         
         # Save the summary
@@ -286,7 +342,14 @@ def summarize_text(request):
         
         return Response({
             'summary': final_summary,
-            'isExisting': False
+            'isExisting': False,
+            'summaryLength': summary_length,
+            'textLength': len(clean_text),
+            'summaryStats': {
+                'originalWordCount': text_word_count,
+                'summaryWordCount': len(final_summary.split()),
+                'compressionRatio': round(len(final_summary.split()) / text_word_count * 100, 1)
+            }
         })
     except Exception as e:
         print(f"Summarization error: {str(e)}")  # Add server-side logging
