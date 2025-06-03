@@ -54,6 +54,12 @@ export const chapterApi = {
 export const questionApi = {
   generateQuestions: (chapterId: number, questionCount: number = 5, questionType: string = 'mixed') => 
     api.post('/generate-questions/', { chapterId, questionCount, questionType }),
+  saveCorrectAnswers: (chapterId: number, correctAnswers: Array<{questionText: string, questionType: string, answer: string}>) => {
+    console.log('=== API CALL: saveCorrectAnswers ===');
+    console.log('Request data:', { chapterId, correctAnswers });
+    console.log('Request URL: /save-correct-answers/');
+    return api.post('/save-correct-answers/', { chapterId, correctAnswers });
+  },
 };
 
 // Add a request interceptor to add the auth token
@@ -110,19 +116,32 @@ api.interceptors.response.use(
         const refreshToken = await AsyncStorage.getItem('refreshToken');
         if (!refreshToken) {
           // No refresh token available, clear tokens and reject
+          console.log('No refresh token available, clearing tokens');
           await AsyncStorage.multiRemove(['token', 'refreshToken']);
           return Promise.reject(error);
         }
 
+        console.log('Attempting to refresh token...');
         const response = await axios.post(`${BASE_URL}/login/refresh/`, {
           refresh: refreshToken,
         });
 
-        const { access } = response.data;
-        await AsyncStorage.setItem('token', access);
-
-        originalRequest.headers.Authorization = `Bearer ${access}`;
-        return api(originalRequest);
+        if (response.data?.access) {
+          const { access } = response.data;
+          await AsyncStorage.setItem('token', access);
+          
+          // Update the original request with the new token
+          originalRequest.headers.Authorization = `Bearer ${access}`;
+          console.log('Token refreshed successfully, retrying original request');
+          
+          // Retry the original request
+          return api(originalRequest);
+        } else {
+          // Invalid refresh response
+          console.log('Invalid refresh response, clearing tokens');
+          await AsyncStorage.multiRemove(['token', 'refreshToken']);
+          return Promise.reject(error);
+        }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
         // If refresh fails, clear tokens and reject the original error

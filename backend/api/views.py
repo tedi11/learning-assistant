@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note, Document, PDFAttachment
+from .models import Item, CustomUser, Course, UserCourseProgress, Chapter, Note, Document, PDFAttachment, UserCorrectAnswer
 from .serializers import (
     ItemSerializer, 
     UserRegistrationSerializer,
@@ -842,7 +842,7 @@ def format_docs(docs: Iterable[LCDocument]):
     # Increase context limit for better coverage and add better formatting
     context_parts = []
     total_length = 0
-    max_context_length = 3000  # Balanced context size for better performance
+    max_context_length = 6000  # Increased from 3000 to 6000 for more comprehensive context
     
     docs_list = list(docs)  # Convert to list to check length
     print(f"DEBUG: format_docs received {len(docs_list)} documents")
@@ -868,14 +868,14 @@ def format_docs(docs: Iterable[LCDocument]):
             break
     
     result = "\n\n".join(context_parts) if context_parts else "No relevant content found."
-    print(f"DEBUG: format_docs returning {len(result)} characters")
+    print(f"DEBUG: format_docs returning {len(result)} characters from {len(docs_list)} documents")
     return result
 
 # Initialize text splitters
 # For assistant - larger chunks for better context
 assistant_text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1200,     # Large chunks for comprehensive context
-    chunk_overlap=200,   # Good overlap for continuity
+    chunk_size=1800,     # Increased from 1200 to 1800 for better context preservation
+    chunk_overlap=300,   # Increased overlap for better continuity
     separators=["\n\n", "\n", ". ", " ", ""],
 )
 
@@ -934,10 +934,13 @@ def ask_question(request):
         clean_text = soup.get_text()
         print(f"DEBUG: Clean text length: {len(clean_text)}")
 
-        # Limit content for question generation (to avoid token limits and speed up processing)
-        max_content_length = 6000  # Balanced for assistant performance
+        # Set content limit for 12 pages max (approximately 30,000 characters)
+        max_content_length = 30000  # Optimized for 12 pages max (2500 chars/page average)
         if len(clean_text) > max_content_length:
+            print(f"DEBUG: Content truncated from {len(clean_text)} to {max_content_length} characters (12 pages max)")
             clean_text = clean_text[:max_content_length] + "..."
+        else:
+            print(f"DEBUG: Using full content ({len(clean_text)} characters)")
         
         # Create document splits
         print("DEBUG: Creating document splits...")
@@ -955,7 +958,7 @@ def ask_question(request):
         retriever = vectorstore.as_retriever(
             search_type="similarity", 
             search_kwargs={
-                "k": 8,  # Increased from 5 to get even more context
+                "k": 12,  # Increased from 8 to 12 for more context
             }
         )
         print("DEBUG: Retriever created successfully")
@@ -1028,8 +1031,8 @@ Answer:"""
                 len(retrieved_docs) == 0):
                 print("DEBUG: RAG returned no content, trying direct approach...")
                 
-                # Use the original content directly with a simpler prompt
-                direct_context = clean_text[:3000]  # Balanced context size
+                # Use more of the original content directly (up to 10,000 chars for direct approach)
+                direct_context = clean_text[:10000]  # About 4 pages worth for direct approach
                 direct_prompt = f"""Based on the following material, answer the student's question clearly and concisely.
 
 Material:
@@ -1058,7 +1061,7 @@ Answer:"""
             try:
                 simple_prompt = f"""You are a helpful learning assistant. Answer the student's question based on the provided material.
 
-Material: {clean_text[:3500]}
+Material: {clean_text[:15000]}
 
 Student Question: {question}
 
@@ -1092,6 +1095,18 @@ Answer:"""
         return Response({
             'error': 'An error occurred while processing your question'
         }, status=500)
+
+def get_exclusion_prompt(previously_answered_questions):
+    """Generate a prompt section to help the LLM avoid previously answered questions"""
+    if not previously_answered_questions:
+        return ""
+    
+    exclusion_text = "\nIMPORTANT: Do NOT create questions similar to these previously answered questions:\n"
+    for i, prev_q in enumerate(previously_answered_questions[:5], 1):  # Limit to 5 to avoid prompt overload
+        exclusion_text += f"- {prev_q['question']} (Type: {prev_q['type']})\n"
+    exclusion_text += "\nGenerate completely NEW and DIFFERENT questions that cover other aspects of the content.\n"
+    
+    return exclusion_text
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1143,6 +1158,22 @@ def generate_questions(request):
         clean_text = soup.get_text()
         print(f"DEBUG: Clean text length: {len(clean_text)}")
 
+        # Get previously correctly answered questions for this note
+        previous_correct_answers = UserCorrectAnswer.objects.filter(
+            user=request.user,
+            note=note
+        ).order_by('-answered_at')
+        
+        previously_answered_questions = []
+        for prev_answer in previous_correct_answers:
+            previously_answered_questions.append({
+                'question': prev_answer.question_text,
+                'type': prev_answer.question_type,
+                'answer': prev_answer.answer
+            })
+        
+        print(f"DEBUG: Found {len(previously_answered_questions)} previously answered questions")
+
         print("DEBUG: Generating questions...")
         
         # Try multiple attempts with different sections of text if needed
@@ -1180,6 +1211,8 @@ def generate_questions(request):
 
 {attempt_text}
 
+{get_exclusion_prompt(previously_answered_questions)}
+
 Format exactly:
 Q1: [Statement here]
 Type: true_false
@@ -1196,6 +1229,8 @@ Make some True and some False. Keep questions clear and simple."""
 
 {attempt_text}
 
+{get_exclusion_prompt(previously_answered_questions)}
+
 Format exactly:
 Q1: [Question here]
 Type: short_answer
@@ -1211,6 +1246,8 @@ Keep questions and answers concise."""
                 question_prompt = f"""Create {min(question_count, 4)} MULTIPLE CHOICE questions from this text:
 
 {attempt_text}
+
+{get_exclusion_prompt(previously_answered_questions)}
 
 Format exactly:
 Q1: [Question here]
@@ -1229,6 +1266,8 @@ Keep questions clear and options concise."""
                 question_prompt = f"""Create {min(question_count, 4)} MIXED questions from this text:
 
 {attempt_text}
+
+{get_exclusion_prompt(previously_answered_questions)}
 
 Format exactly:
 Q1: [Question here]
@@ -1666,3 +1705,88 @@ def create_fallback_questions(text, question_count, question_type, start_id):
             })
     
     return fallback_questions
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_correct_answers(request):
+    """Save questions that the user answered correctly to avoid regenerating them"""
+    try:
+        print(f"DEBUG: save_correct_answers called with data: {request.data}")
+        print(f"DEBUG: User: {request.user}")
+        
+        chapter_id = request.data.get('chapterId')
+        correct_answers = request.data.get('correctAnswers', [])
+        
+        print(f"DEBUG: Chapter ID: {chapter_id}")
+        print(f"DEBUG: Correct answers count: {len(correct_answers)}")
+        print(f"DEBUG: Correct answers data: {correct_answers}")
+        
+        if not chapter_id:
+            print("DEBUG: Missing chapter_id")
+            return Response({
+                'error': 'Chapter ID is required'
+            }, status=400)
+        
+        if not correct_answers:
+            print("DEBUG: No correct answers provided")
+            return Response({
+                'message': 'No correct answers to save'
+            })
+        
+        # Get the chapter and note
+        chapter = get_object_or_404(Chapter, id=chapter_id)
+        print(f"DEBUG: Found chapter: {chapter.title}")
+        
+        note = Note.objects.filter(chapter=chapter).first()
+        print(f"DEBUG: Found note: {bool(note)}")
+        
+        if not note:
+            print("DEBUG: No note found for chapter")
+            return Response({
+                'error': 'No note found for this chapter'
+            }, status=404)
+        
+        saved_count = 0
+        
+        for i, answer_data in enumerate(correct_answers):
+            print(f"DEBUG: Processing answer {i+1}: {answer_data}")
+            
+            question_text = answer_data.get('questionText', '')
+            question_type = answer_data.get('questionType', '')
+            answer = answer_data.get('answer', '')
+            
+            print(f"DEBUG: Question text: {question_text}")
+            print(f"DEBUG: Question type: {question_type}")
+            print(f"DEBUG: Answer: {answer}")
+            
+            if question_text and question_type:
+                # Create or get the correct answer record
+                correct_answer, created = UserCorrectAnswer.objects.get_or_create(
+                    user=request.user,
+                    note=note,
+                    question_text=question_text,
+                    defaults={
+                        'question_type': question_type,
+                        'answer': answer
+                    }
+                )
+                print(f"DEBUG: UserCorrectAnswer created: {created}, ID: {correct_answer.id}")
+                if created:
+                    saved_count += 1
+            else:
+                print(f"DEBUG: Skipping answer {i+1} - missing required fields")
+        
+        print(f"DEBUG: Total saved: {saved_count}")
+        
+        return Response({
+            'message': f'Saved {saved_count} correct answers',
+            'savedCount': saved_count
+        })
+        
+    except Exception as e:
+        print(f"ERROR in save_correct_answers: {str(e)}")
+        import traceback
+        print(f"ERROR traceback: {traceback.format_exc()}")
+        return Response({
+            'error': 'Failed to save correct answers'
+        }, status=500)

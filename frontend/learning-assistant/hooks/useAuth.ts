@@ -23,19 +23,27 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
 
   const checkAuth = async () => {
     try {
-      const token = await authService.getToken();
-      if (token) {
-        // Try to get current user - the api interceptor will handle token refresh if needed
-        const response = await authService.getCurrentUser();
-        setUser(response.data);
+      console.log('Starting authentication check...');
+      
+      // First check if we have valid tokens at all
+      const hasValidTokens = await authService.hasValidTokens();
+      if (!hasValidTokens) {
+        console.log('No valid tokens found');
+        setLoading(false);
+        return;
       }
+
+      // Try to get current user - the api interceptor will handle token refresh if needed
+      console.log('Valid tokens found, checking user profile...');
+      const response = await authService.getCurrentUser();
+      setUser(response.data);
+      console.log('Authentication check successful');
     } catch (error: any) {
-      // Only log non-401 errors to reduce noise
-      if (error.response?.status !== 401) {
-        console.error('Auth check failed:', error);
-      }
-      // Clear invalid tokens silently
+      console.log('Authentication check failed:', error.message);
+      
+      // Clear invalid tokens - this handles both expired and invalid tokens
       await authService.logout();
+      setUser(null);
     } finally {
       setLoading(false);
     }

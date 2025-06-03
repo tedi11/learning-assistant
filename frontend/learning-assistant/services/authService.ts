@@ -33,6 +33,18 @@ interface UserProfile {
     courses_count: number;
 }
 
+// Helper function to check if JWT token is expired
+const isTokenExpired = (token: string): boolean => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const currentTime = Math.floor(Date.now() / 1000);
+        return payload.exp < currentTime;
+    } catch (error) {
+        console.log('Error checking token expiration:', error);
+        return true; // Assume expired if we can't parse it
+    }
+};
+
 class AuthService {
     async login(email: string, password: string): Promise<LoginResponse> {
         try {
@@ -104,7 +116,48 @@ class AuthService {
 
     async isAuthenticated(): Promise<boolean> {
         const token = await this.getToken();
-        return !!token;
+        if (!token) {
+            return false;
+        }
+        
+        // Check if token is expired
+        if (isTokenExpired(token)) {
+            console.log('Token is expired, clearing tokens');
+            await this.logout();
+            return false;
+        }
+        
+        return true;
+    }
+
+    async hasValidTokens(): Promise<boolean> {
+        const token = await this.getToken();
+        const refreshToken = await AsyncStorage.getItem('refreshToken');
+        
+        // Check if we have both tokens
+        if (!token || !refreshToken) {
+            return false;
+        }
+        
+        // Check if access token is expired
+        if (isTokenExpired(token)) {
+            // Access token is expired, check if refresh token is valid
+            try {
+                if (isTokenExpired(refreshToken)) {
+                    console.log('Both tokens are expired, clearing tokens');
+                    await this.logout();
+                    return false;
+                }
+                // Refresh token is still valid, we can attempt refresh
+                return true;
+            } catch (error) {
+                console.log('Error checking refresh token, clearing tokens');
+                await this.logout();
+                return false;
+            }
+        }
+        
+        return true;
     }
 
     async register(
@@ -154,6 +207,20 @@ class AuthService {
     }
 
     async getCurrentUser(): Promise<AxiosResponse<UserProfile>> {
+        // Check if we have a valid token first
+        const token = await this.getToken();
+        if (!token) {
+            throw new Error('No authentication token found');
+        }
+
+        // Check if token is expired before making the request
+        if (isTokenExpired(token)) {
+            console.log('Token is expired, clearing tokens before API call');
+            await this.logout();
+            throw new Error('Authentication token has expired');
+        }
+
+        console.log('Token is valid, making API call...');
         // Use the api instance instead of direct axios to benefit from interceptors
         return api.get<UserProfile>('/profile/');
     }

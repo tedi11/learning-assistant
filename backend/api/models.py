@@ -118,3 +118,24 @@ class PDFAttachment(models.Model):
 
     class Meta:
         ordering = ['page_number', 'created_at']
+
+class UserCorrectAnswer(models.Model):
+    """Store questions that users have answered correctly to avoid regenerating them"""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='correct_answers')
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='correct_answers') 
+    question_text = models.TextField()
+    question_type = models.CharField(max_length=20, choices=[
+        ('true_false', 'True/False'),
+        ('multiple_choice', 'Multiple Choice'),
+        ('short_answer', 'Short Answer'),
+        ('mixed', 'Mixed')
+    ])
+    answer = models.TextField()  # Store the correct answer
+    answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['user', 'note', 'question_text']  # Prevent duplicate entries
+        ordering = ['-answered_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.note.chapter.title} - {self.question_type}"
