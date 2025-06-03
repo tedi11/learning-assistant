@@ -102,7 +102,7 @@ export default function QuestionsScreen() {
       [questionId]: answer
     }));
     
-    // Automatically show answer for true/false and multiple choice questions
+    // Automatically show answer for true/false and multiple choice questions only
     const question = questions.find(q => q.id === questionId);
     if (question && (question.type === 'true_false' || question.type === 'multiple_choice')) {
       setShowAnswers(prev => ({
@@ -439,7 +439,8 @@ export default function QuestionsScreen() {
               )}
 
               {/* Show Answer */}
-              {showAnswers[questions[currentQuestionIndex].id] && (
+              {showAnswers[questions[currentQuestionIndex].id] && 
+               questions[currentQuestionIndex].type === 'short_answer' && (
                 <View style={styles.answerRevealContainer}>
                   <Text style={styles.answerLabel}>Correct Answer:</Text>
                   <View style={styles.correctAnswerBox}>
@@ -526,20 +527,25 @@ export default function QuestionsScreen() {
                     <Text style={styles.showAnswerButtonText}>Show Answer</Text>
                   </TouchableOpacity>
                 ) : (
-                  // Only show reset button if all questions have been answered AND we're on the last question
-                  Object.keys(showAnswers).length === questions.length && 
-                  Object.keys(userAnswers).length === questions.length &&
-                  currentQuestionIndex === questions.length - 1 ? (
-                    <TouchableOpacity
-                      onPress={handleResetQuiz}
-                      style={styles.resetButton}
-                    >
-                      <Text style={styles.resetButtonText}>Reset Quiz</Text>
-                    </TouchableOpacity>
+                  // For short answer questions, don't show any message after revealing answer
+                  questions[currentQuestionIndex].type === 'short_answer' ? (
+                    <View />
                   ) : (
-                    <View style={styles.answeredIndicator}>
-                      <Text style={styles.answeredText}>✓ Answered</Text>
-                    </View>
+                    // Only show reset button if all questions have been answered AND we're on the last question
+                    Object.keys(showAnswers).length === questions.length && 
+                    Object.keys(userAnswers).length === questions.length &&
+                    currentQuestionIndex === questions.length - 1 ? (
+                      <TouchableOpacity
+                        onPress={handleResetQuiz}
+                        style={styles.resetButton}
+                      >
+                        <Text style={styles.resetButtonText}>Reset Quiz</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.answeredIndicator}>
+                        <Text style={styles.answeredText}>✓ Answered</Text>
+                      </View>
+                    )
                   )
                 )}
               </View>
@@ -1166,5 +1172,16 @@ const styles = StyleSheet.create({
   },
   askAssistantButtonTextDisabled: {
     color: '#ccc',
+  },
+  questionTypeIndicator: {
+    padding: 12,
+    borderWidth: 2,
+    borderColor: '#28a745',
+    borderRadius: 8,
+  },
+  questionTypeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#28a745',
   },
 }); 

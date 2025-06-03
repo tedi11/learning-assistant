@@ -99,22 +99,26 @@ export default function EditChapterScreen() {
             <KeyboardAvoidingView 
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 style={styles.editorContainer}
-                keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 80}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 10}
             >
-                <View style={styles.editorSection}>
-                    <Text style={styles.sectionTitle}>✍️ Content Editor</Text>
-                    
-                    <View style={styles.editorWrapper}>
-                        <ScrollView style={styles.editor} contentContainerStyle={styles.editorContent}>
-                            <RichEditor
-                                ref={richText}
-                                onChange={setContent}
-                                initialContentHTML={content}
-                                placeholder="Start typing your content here... Use the toolbar below to format your text."
-                                style={styles.richEditor}
-                            />
-                        </ScrollView>
+                <View style={styles.contentSection}>
+                    <View style={styles.editorSection}>
+                        <Text style={styles.sectionTitle}>✍️ Content Editor</Text>
                         
+                        <View style={styles.editorWrapper}>
+                            <ScrollView style={styles.editor} contentContainerStyle={styles.editorContent}>
+                                <RichEditor
+                                    ref={richText}
+                                    onChange={setContent}
+                                    initialContentHTML={content}
+                                    placeholder="Start typing your content here... Use the toolbar below to format your text."
+                                    style={styles.richEditor}
+                                />
+                            </ScrollView>
+                        </View>
+                    </View>
+
+                    <View style={styles.toolbarContainer}>
                         <RichToolbar
                             editor={richText}
                             actions={[
@@ -194,34 +198,34 @@ const styles = StyleSheet.create({
     },
     headerContent: {
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingBottom: 24,
+        paddingHorizontal: 16,
+        paddingBottom: 16,
     },
     title: {
-        fontSize: 28,
+        fontSize: 26,
         fontWeight: '800',
         color: '#1a1a1a',
-        marginBottom: 8,
+        marginBottom: 6,
         textAlign: 'center',
         letterSpacing: 0.3,
     },
     subtitle: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#666',
         textAlign: 'center',
         fontWeight: '500',
-        lineHeight: 24,
+        lineHeight: 22,
     },
     editorContainer: {
         flex: 1,
         backgroundColor: '#f8f9fa',
-        padding: 20,
+        padding: 12,
     },
-    editorSection: {
+    contentSection: {
         flex: 1,
         backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 20,
+        borderRadius: 12,
+        padding: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
@@ -229,19 +233,23 @@ const styles = StyleSheet.create({
         elevation: 4,
         borderWidth: 1,
         borderColor: '#f0f0f0',
-        marginBottom: 20,
+        marginBottom: 12,
+    },
+    editorSection: {
+        flex: 1,
+        marginBottom: 12,
     },
     sectionTitle: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: '#1a1a1a',
-        marginBottom: 16,
+        marginBottom: 12,
         letterSpacing: 0.3,
     },
     editorWrapper: {
         flex: 1,
-        borderRadius: 12,
-        borderWidth: 2,
+        borderRadius: 8,
+        borderWidth: 1,
         borderColor: '#e9ecef',
         overflow: 'hidden',
         backgroundColor: '#fff',
@@ -257,8 +265,8 @@ const styles = StyleSheet.create({
         minHeight: 300,
     },
     editorContent: {
-        padding: 16,
-        paddingBottom: 32,
+        padding: 12,
+        paddingBottom: 20,
     },
     richEditor: {
         minHeight: 250,
@@ -266,18 +274,28 @@ const styles = StyleSheet.create({
         fontSize: 16,
         lineHeight: 24,
     },
+    toolbarContainer: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e9ecef',
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
     toolbar: {
         backgroundColor: '#f8f9fa',
-        borderTopWidth: 1,
-        borderTopColor: '#e9ecef',
         paddingVertical: 8,
         paddingHorizontal: 12,
     },
     submitButton: {
         backgroundColor: '#007AFF',
-        paddingVertical: 18,
-        paddingHorizontal: 24,
-        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 10,
         alignItems: 'center',
         shadowColor: '#007AFF',
         shadowOffset: { width: 0, height: 4 },
