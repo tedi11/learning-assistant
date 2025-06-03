@@ -25,6 +25,7 @@ export default function QuestionsScreen() {
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedQuestionType, setSelectedQuestionType] = useState<string>('mixed'); // 'mixed', 'true_false', 'short_answer', 'multiple_choice'
+  const [correctlyAnsweredQuestions, setCorrectlyAnsweredQuestions] = useState<Array<{questionText: string, questionType: string, answer: string}>>([]);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -47,11 +48,35 @@ export default function QuestionsScreen() {
     }
   }, [user, fetchCourses]);
 
-  const onRefresh = useCallback(() => {
-    if (!user) return;
-    setRefreshing(true);
-    fetchCourses();
-  }, [user, fetchCourses]);
+  const saveCorrectAnswers = useCallback(async () => {
+    if (!selectedChapter) {
+      console.log('Cannot save correct answers: No selected chapter');
+      return;
+    }
+    
+    if (correctlyAnsweredQuestions.length === 0) {
+      console.log('Cannot save correct answers: No correctly answered questions');
+      return;
+    }
+    
+    console.log('=== SAVING CORRECT ANSWERS ===');
+    console.log('Attempting to save correct answers:', {
+      chapterId: selectedChapter.id,
+      correctAnswers: correctlyAnsweredQuestions,
+      count: correctlyAnsweredQuestions.length
+    });
+    
+    try {
+      console.log('Making API call to save correct answers...');
+      const response = await questionApi.saveCorrectAnswers(selectedChapter.id, correctlyAnsweredQuestions);
+      console.log('Successfully saved correct answers:', response.data);
+      console.log('=== SAVE SUCCESSFUL ===');
+    } catch (error: any) {
+      console.error('Failed to save correct answers:', error);
+      console.error('Error details:', error.response?.data);
+      console.log('=== SAVE FAILED ===');
+    }
+  }, [selectedChapter, correctlyAnsweredQuestions]);
 
   const handleGenerateQuestions = useCallback(async () => {
     if (!selectedChapter) {
@@ -62,6 +87,12 @@ export default function QuestionsScreen() {
     if (!selectedChapter.notes || selectedChapter.notes.length === 0) {
       setError('This chapter has no content yet. Please add some content before generating questions.');
       return;
+    }
+
+    // Save any correct answers from the previous quiz before generating new ones
+    if (correctlyAnsweredQuestions.length > 0) {
+      console.log('Saving correct answers from previous quiz before generating new questions...');
+      await saveCorrectAnswers();
     }
 
     setGenerating(true);
@@ -77,6 +108,7 @@ export default function QuestionsScreen() {
         setCurrentQuestionIndex(0);
         setShowAnswers({});
         setUserAnswers({});
+        setCorrectlyAnsweredQuestions([]); // Clear correct answers for the new quiz
       } else {
         setError('No questions were generated. Please try again.');
       }
@@ -86,7 +118,13 @@ export default function QuestionsScreen() {
     } finally {
       setGenerating(false);
     }
-  }, [selectedChapter, questionCount, selectedQuestionType]);
+  }, [selectedChapter, questionCount, selectedQuestionType, correctlyAnsweredQuestions, saveCorrectAnswers]);
+
+  const onRefresh = useCallback(() => {
+    if (!user) return;
+    setRefreshing(true);
+    fetchCourses();
+  }, [user, fetchCourses]);
 
   const handleCourseSelect = useCallback((course: Course | null) => {
     setSelectedCourse(course);
@@ -109,6 +147,42 @@ export default function QuestionsScreen() {
         ...prev,
         [questionId]: true
       }));
+      
+      // Check if the answer is correct and add to correctly answered questions
+      const isCorrect = answer.toLowerCase() === question.answer.toLowerCase();
+      console.log('Answer check:', {
+        questionId,
+        userAnswer: answer,
+        correctAnswer: question.answer,
+        isCorrect,
+        questionType: question.type
+      });
+      
+      if (isCorrect) {
+        console.log('Adding correct answer to tracking:', {
+          questionText: question.question,
+          questionType: question.type,
+          answer: question.answer
+        });
+        
+        setCorrectlyAnsweredQuestions(prev => {
+          // Check if this question is already tracked to avoid duplicates
+          const alreadyExists = prev.some(q => q.questionText === question.question);
+          if (alreadyExists) {
+            console.log('Question already tracked, skipping');
+            return prev;
+          }
+          
+          const newAnswers = [...prev, {
+            questionText: question.question,
+            questionType: question.type,
+            answer: question.answer
+          }];
+          
+          console.log('Updated correctly answered questions:', newAnswers);
+          return newAnswers;
+        });
+      }
     }
   }, [questions]);
 
@@ -124,18 +198,103 @@ export default function QuestionsScreen() {
     }
   }, [currentQuestionIndex]);
 
+  const checkIfAnswerCorrect = useCallback((questionId: number) => {
+    const question = questions.find(q => q.id === questionId);
+    const userAnswer = userAnswers[questionId];
+    
+    if (!question || !userAnswer) return false;
+    
+    // For true/false and multiple choice, check exact match
+    if (question.type === 'true_false' || question.type === 'multiple_choice') {
+      return userAnswer.toLowerCase() === question.answer.toLowerCase();
+    }
+    
+    // For short answer, we'll consider it correct if user provided an answer
+    // (since automatic checking of short answers is complex)
+    if (question.type === 'short_answer') {
+      return userAnswer.trim().length > 0;
+    }
+    
+    return false;
+  }, [questions, userAnswers]);
+
   const handleShowAnswers = useCallback((questionId: number) => {
     setShowAnswers(prev => ({
       ...prev,
       [questionId]: true
     }));
-  }, []);
+    
+    // Check if the user had the correct answer before revealing
+    const question = questions.find(q => q.id === questionId);
+    const userAnswer = userAnswers[questionId];
+    
+    if (question && userAnswer) {
+      const isCorrect = checkIfAnswerCorrect(questionId);
+      if (isCorrect) {
+        setCorrectlyAnsweredQuestions(prev => {
+          // Check if this question is already tracked to avoid duplicates
+          const alreadyExists = prev.some(q => q.questionText === question.question);
+          if (alreadyExists) return prev;
+          
+          return [...prev, {
+            questionText: question.question,
+            questionType: question.type,
+            answer: question.answer
+          }];
+        });
+      }
+    }
+  }, [questions, userAnswers, checkIfAnswerCorrect]);
 
-  const handleResetQuiz = useCallback(() => {
+  const handleResetQuiz = useCallback(async () => {
+    console.log('Reset quiz called, saving correct answers first...');
+    console.log('Correct answers to save:', correctlyAnsweredQuestions);
+    
+    // Save correctly answered questions before resetting
+    await saveCorrectAnswers();
+    
+    console.log('Resetting quiz state...');
     setUserAnswers({});
     setCurrentQuestionIndex(0);
     setShowAnswers({});
-  }, []);
+    setCorrectlyAnsweredQuestions([]);
+  }, [saveCorrectAnswers, correctlyAnsweredQuestions]);
+
+  // Auto-save correct answers when all questions have been answered
+  useEffect(() => {
+    const answeredQuestions = Object.keys(showAnswers).length;
+    const totalQuestions = questions.length;
+    
+    console.log('Auto-save check:', {
+      answeredQuestions,
+      totalQuestions,
+      correctlyAnsweredCount: correctlyAnsweredQuestions.length,
+      showAnswers,
+      correctlyAnsweredQuestions
+    });
+    
+    if (answeredQuestions === totalQuestions && totalQuestions > 0 && correctlyAnsweredQuestions.length > 0) {
+      console.log(`All ${totalQuestions} questions answered, saving ${correctlyAnsweredQuestions.length} correct answers`);
+      saveCorrectAnswers();
+    }
+  }, [showAnswers, questions.length, correctlyAnsweredQuestions.length, saveCorrectAnswers]);
+
+  // Additional auto-save trigger when we have correct answers and are not in the middle of answering
+  useEffect(() => {
+    // Save after a delay when we have correct answers, in case the user stops answering
+    if (correctlyAnsweredQuestions.length > 0) {
+      console.log('Setting up delayed save for correct answers...');
+      const saveTimer = setTimeout(() => {
+        console.log('Delayed save triggered for correct answers');
+        saveCorrectAnswers();
+      }, 3000); // Save after 3 seconds of inactivity
+
+      return () => {
+        console.log('Clearing delayed save timer');
+        clearTimeout(saveTimer);
+      };
+    }
+  }, [correctlyAnsweredQuestions, saveCorrectAnswers]);
 
   const toggleDropdown = () => setIsDropdownVisible(!isDropdownVisible);
 
@@ -220,30 +379,44 @@ export default function QuestionsScreen() {
                   activeOpacity={1}
                   onPress={() => setIsDropdownVisible(false)}
                 >
-                  <View style={[styles.dropdownList, Platform.OS === 'web' && styles.webDropdownList]}>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => handleCourseSelect(null)}
+                  <View style={[styles.dropdownContainer, Platform.OS === 'web' && styles.webDropdownContainer]}>
+                    <ScrollView 
+                      showsVerticalScrollIndicator={true}
+                      bounces={false}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled={true}
                     >
-                      <Text style={styles.dropdownItemText}>Select a course...</Text>
-                    </TouchableOpacity>
-                    {courses.map((course) => (
                       <TouchableOpacity
-                        key={course.id}
-                        style={[
-                          styles.dropdownItem,
-                          selectedCourse?.id === course.id && styles.selectedDropdownItem
-                        ]}
-                        onPress={() => handleCourseSelect(course)}
+                        style={styles.dropdownItem}
+                        onPress={() => handleCourseSelect(null)}
                       >
-                        <Text style={[
-                          styles.dropdownItemText,
-                          selectedCourse?.id === course.id && styles.selectedDropdownItemText
-                        ]}>
-                          {course.title}
-                        </Text>
+                        <Text style={styles.dropdownItemText}>Select a course...</Text>
                       </TouchableOpacity>
-                    ))}
+                      {courses.map((course) => (
+                        <TouchableOpacity
+                          key={course.id}
+                          style={[
+                            styles.dropdownItem,
+                            selectedCourse?.id === course.id && styles.selectedDropdownItem
+                          ]}
+                          onPress={() => handleCourseSelect(course)}
+                        >
+                          <Text style={[
+                            styles.dropdownItemText,
+                            selectedCourse?.id === course.id && styles.selectedDropdownItemText
+                          ]}>
+                            {course.title}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                      {courses.length > 4 && (
+                        <View style={styles.scrollIndicator}>
+                          <Text style={styles.scrollIndicatorText}>
+                            {courses.length} courses total
+                          </Text>
+                        </View>
+                      )}
+                    </ScrollView>
                   </View>
                 </TouchableOpacity>
               </Modal>
@@ -702,7 +875,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  dropdownList: {
+  dropdownContainer: {
     backgroundColor: '#fff',
     borderRadius: 16,
     maxHeight: 300,
@@ -716,7 +889,7 @@ const styles = StyleSheet.create({
     borderColor: '#f0f0f0',
     overflow: 'hidden',
   },
-  webDropdownList: {
+  webDropdownContainer: {
     maxWidth: 450,
   },
   dropdownItem: {
@@ -1183,5 +1356,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#28a745',
+  },
+  scrollIndicator: {
+    padding: 8,
+    backgroundColor: '#f8f9fa',
+    borderTopWidth: 1,
+    borderTopColor: '#e9ecef',
+    alignItems: 'center',
+  },
+  scrollIndicatorText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
   },
 }); 
