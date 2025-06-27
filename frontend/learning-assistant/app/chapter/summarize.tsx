@@ -384,38 +384,46 @@ export default function SummarizeScreen() {
                                         fontSize: 28 * textScale,
                                         fontWeight: '800',
                                         color: '#1a1a1a',
-                                        marginVertical: 16,
+                                        marginVertical: 8,
+                                        marginTop: 12,
                                         letterSpacing: 0.3,
                                     },
                                     h2: {
                                         fontSize: 24 * textScale,
                                         fontWeight: '700',
                                         color: '#1a1a1a',
-                                        marginVertical: 12,
+                                        marginVertical: 6,
+                                        marginTop: 10,
                                         letterSpacing: 0.2,
                                     },
                                     h3: {
                                         fontSize: 20 * textScale,
                                         fontWeight: '600',
                                         color: '#1a1a1a',
-                                        marginVertical: 8,
+                                        marginVertical: 4,
+                                        marginTop: 8,
                                         letterSpacing: 0.1,
                                     },
                                     p: {
                                         fontSize: 16 * textScale,
                                         color: '#333',
                                         lineHeight: 26 * textScale,
-                                        marginVertical: 8,
+                                        marginVertical: 4,
                                         fontWeight: '400',
                                     },
                                     ul: {
-                                        marginVertical: 8,
+                                        marginVertical: 4,
+                                        marginLeft: 20,
+                                    },
+                                    ol: {
+                                        marginVertical: 4,
+                                        marginLeft: 20,
                                     },
                                     li: {
                                         fontSize: 16 * textScale,
                                         color: '#333',
                                         lineHeight: 24 * textScale,
-                                        marginVertical: 4,
+                                        marginVertical: 2,
                                     },
                                     strong: {
                                         fontWeight: '700',
@@ -424,6 +432,17 @@ export default function SummarizeScreen() {
                                     em: {
                                         fontStyle: 'italic',
                                         color: '#555',
+                                    },
+                                    pre: {
+                                        backgroundColor: '#f5f5f5',
+                                        padding: 16,
+                                        borderRadius: 8,
+                                        marginVertical: 8,
+                                        fontSize: 14 * textScale,
+                                    },
+                                    img: {
+                                        borderRadius: 8,
+                                        marginVertical: 12,
                                     }
                                 }}
                                 baseStyle={{
@@ -431,6 +450,24 @@ export default function SummarizeScreen() {
                                     fontSize: 16 * textScale,
                                     lineHeight: 26 * textScale,
                                     fontWeight: '400',
+                                }}
+                                classesStyles={{
+                                    'pdf-content': {
+                                        backgroundColor: '#ffffff',
+                                        borderRadius: 12,
+                                        padding: 20,
+                                        shadowColor: '#000',
+                                        shadowOffset: {
+                                            width: 0,
+                                            height: 2,
+                                        },
+                                        shadowOpacity: 0.1,
+                                        shadowRadius: 4,
+                                        elevation: 3,
+                                    },
+                                    'pdf-body': {
+                                        backgroundColor: 'transparent',
+                                    }
                                 }}
                             />
                         )}
