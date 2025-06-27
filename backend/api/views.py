@@ -538,11 +538,365 @@ def upload_document(request):
         return Response({'error': str(e)}, status=500)
 
 def process_pdf(file_content, start_page=None, end_page=None):
-    """Process PDF content and return HTML and image information."""
+    """Enhanced PDF processing with smart structure detection and improved extraction."""
+    
+    def analyze_font_hierarchy(doc):
+        """Analyze the document to determine font size hierarchy for better heading detection."""
+        font_sizes = []
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            blocks = page.get_text("dict")["blocks"]
+            for block in blocks:
+                if "lines" in block:
+                    for line in block["lines"]:
+                        for span in line["spans"]:
+                            if span.get("size"):
+                                font_sizes.append(span["size"])
+        
+        if not font_sizes:
+            return {"body": 12, "h3": 14, "h2": 16, "h1": 18}
+        
+        # Calculate font size thresholds
+        unique_sizes = sorted(set(font_sizes), reverse=True)
+        if len(unique_sizes) >= 4:
+            return {
+                "h1": unique_sizes[0],
+                "h2": unique_sizes[1], 
+                "h3": unique_sizes[2],
+                "body": unique_sizes[3]
+            }
+        elif len(unique_sizes) >= 2:
+            return {
+                "h1": unique_sizes[0],
+                "h2": unique_sizes[0] * 0.9,
+                "h3": unique_sizes[0] * 0.8,
+                "body": unique_sizes[-1]
+            }
+        else:
+            base_size = unique_sizes[0] if unique_sizes else 12
+            return {
+                "h1": base_size * 1.5,
+                "h2": base_size * 1.3,
+                "h3": base_size * 1.1,
+                "body": base_size
+            }
+
+    def detect_text_structure(span, font_hierarchy):
+        """Detect if text is heading, list item, or body text."""
+        text = span.get("text", "").strip()
+        size = span.get("size", 12)
+        flags = span.get("flags", 0)
+        
+        # Check for headings based on font size
+        if size >= font_hierarchy["h1"] * 0.95:
+            return "h1"
+        elif size >= font_hierarchy["h2"] * 0.95:
+            return "h2"
+        elif size >= font_hierarchy["h3"] * 0.95:
+            return "h3"
+        
+        # Check for list items
+        list_patterns = [
+            r'^\s*[•·▪▫◦‣⁃]\s+',  # Bullet points
+            r'^\s*[\d]+\.\s+',      # Numbered lists
+            r'^\s*[a-zA-Z]\.\s+',   # Lettered lists
+            r'^\s*[\d]+\)\s+',      # Numbered with parenthesis
+            r'^\s*-\s+',            # Dash bullets
+            r'^\s*\*\s+',           # Asterisk bullets
+        ]
+        
+        for pattern in list_patterns:
+            if re.match(pattern, text):
+                return "list"
+        
+        # Check for bold/italic formatting
+        is_bold = bool(flags & 2**4)  # Bold flag
+        is_italic = bool(flags & 2**1)  # Italic flag
+        
+        if is_bold and not text.endswith(':'):
+            return "strong"
+        elif is_italic:
+            return "em"
+        
+        return "body"
+
+    def extract_tables(page):
+        """Extract tables using PyMuPDF's table detection."""
+        tables_html = []
+        try:
+            tables = page.find_tables()
+            for table in tables:
+                table_data = table.extract()
+                if not table_data or len(table_data) < 2:  # Skip if no data or only one row
+                    continue
+                
+                html_table = ["<table border='1' style='border-collapse: collapse; margin: 10px 0;'>"]
+                
+                # Detect header row (usually first row or row with different formatting)
+                header_row = table_data[0]
+                if header_row:
+                    html_table.append("<thead><tr>")
+                    for cell in header_row:
+                        cell_content = str(cell).strip() if cell else ""
+                        html_table.append(f"<th style='padding: 8px; background-color: #f0f0f0;'>{cell_content}</th>")
+                    html_table.append("</tr></thead>")
+                
+                # Process data rows
+                if len(table_data) > 1:
+                    html_table.append("<tbody>")
+                    for row in table_data[1:]:
+                        html_table.append("<tr>")
+                        for cell in row:
+                            cell_content = str(cell).strip() if cell else ""
+                            html_table.append(f"<td style='padding: 8px;'>{cell_content}</td>")
+                        html_table.append("</tr>")
+                    html_table.append("</tbody>")
+                
+                html_table.append("</table>")
+                tables_html.append("".join(html_table))
+        except Exception as e:
+            print(f"Table extraction error: {str(e)}")
+        
+        return tables_html
+
+    def process_text_blocks(page, font_hierarchy):
+        """Process text blocks with improved structure detection."""
+        blocks = page.get_text("dict")["blocks"]
+        html_content = []
+        current_paragraph = []
+        last_y = None
+        last_element_type = None
+        
+        for block in blocks:
+            if "lines" not in block:
+                continue
+            
+            block_html = []
+            
+            for line in block["lines"]:
+                line_text = ""
+                line_formatting = []
+                
+                for span in line["spans"]:
+                    text = span.get("text", "").strip()
+                    if not text:
+                        continue
+                    
+                    structure_type = detect_text_structure(span, font_hierarchy)
+                    
+                    # Handle different text structures
+                    if structure_type in ["h1", "h2", "h3"]:
+                        # Close any open paragraph
+                        if current_paragraph:
+                            html_content.append(f"<p>{''.join(current_paragraph)}</p>")
+                            current_paragraph = []
+                        
+                        html_content.append(f"<{structure_type}>{text}</{structure_type}>")
+                        last_element_type = structure_type
+                        
+                    elif structure_type == "list":
+                        # Close any open paragraph
+                        if current_paragraph:
+                            html_content.append(f"<p>{''.join(current_paragraph)}</p>")
+                            current_paragraph = []
+                        
+                        # Clean up list item text
+                        clean_text = re.sub(r'^\s*[•·▪▫◦‣⁃\-\*]?\s*[\d]*[.)]*\s*[a-zA-Z]*[.)]*\s*', '', text)
+                        html_content.append(f"<ul><li>{clean_text}</li></ul>")
+                        last_element_type = "list"
+                        
+                    elif structure_type == "strong":
+                        line_text += f"<strong>{text}</strong>"
+                        
+                    elif structure_type == "em":
+                        line_text += f"<em>{text}</em>"
+                        
+                    else:
+                        line_text += text
+                
+                # Add processed line to current paragraph if it's body text
+                if line_text and last_element_type not in ["h1", "h2", "h3", "list"]:
+                    current_paragraph.append(line_text + " ")
+            
+            # Handle paragraph breaks based on spacing
+            current_y = block.get("bbox", [0, 0, 0, 0])[1]
+            if last_y is not None:
+                y_diff = abs(current_y - last_y)
+                if y_diff > 20 and current_paragraph:  # Significant spacing indicates paragraph break
+                    html_content.append(f"<p>{''.join(current_paragraph).strip()}</p>")
+                    current_paragraph = []
+            
+            last_y = current_y
+        
+        # Close any remaining paragraph
+        if current_paragraph:
+            html_content.append(f"<p>{''.join(current_paragraph).strip()}</p>")
+        
+        return html_content
+
+    def extract_enhanced_images(doc, start_idx, end_idx):
+        """Enhanced image extraction with quality filtering and metadata."""
+        image_info = []
+        max_images = 20
+        min_width, min_height = 150, 150  # Increased minimum size
+        max_width, max_height = 4000, 4000  # Maximum size to avoid huge images
+        
+        for page_num in range(start_idx, min(end_idx + 1, doc.page_count)):
+            if len(image_info) >= max_images:
+                break
+            
+            page = doc[page_num]
+            image_list = page.get_images()
+            
+            for img_index, img in enumerate(image_list):
+                if len(image_info) >= max_images:
+                    break
+                
+                try:
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    
+                    width = base_image.get("width", 0)
+                    height = base_image.get("height", 0)
+                    
+                    # Enhanced size filtering
+                    if (width < min_width or height < min_height or 
+                        width > max_width or height > max_height):
+                        continue
+                    
+                    # Calculate aspect ratio to filter out very thin/wide images (likely decorative)
+                    aspect_ratio = width / height if height > 0 else 0
+                    if aspect_ratio < 0.1 or aspect_ratio > 10:
+                        continue
+                    
+                    # File size filtering (avoid tiny files that are likely artifacts)
+                    image_bytes = base_image.get("image", b"")
+                    if len(image_bytes) < 1000:  # Less than 1KB likely an artifact
+                        continue
+                    
+                    # Enhanced filename with metadata
+                    ext = base_image.get("ext", "png")
+                    if ext not in ["png", "jpeg", "jpg"]:
+                        ext = "png"  # Default to PNG for unsupported formats
+                    
+                    image_filename = f"page_{page_num + 1}_img_{img_index + 1}_{width}x{height}.{ext}"
+                    
+                    image_info.append({
+                        'filename': image_filename,
+                        'image_bytes': image_bytes,
+                        'page_number': page_num + 1,
+                        'width': width,
+                        'height': height,
+                        'size_bytes': len(image_bytes),
+                        'format': ext
+                    })
+                    
+                except Exception as e:
+                    print(f"Error extracting image on page {page_num + 1}: {str(e)}")
+                    continue
+        
+        return image_info
+
+    # Main processing with robust error handling
+    try:
+        # Initialize PyMuPDF document
+        pdf_document = fitz.open(stream=file_content, filetype="pdf")
+        total_pages = len(pdf_document)
+        
+        # Set default page range if not provided
+        if start_page is None:
+            start_page = 1
+        if end_page is None:
+            end_page = min(total_pages, 10)
+        
+        # Validate and adjust page range
+        start_page = max(1, min(start_page, total_pages))
+        end_page = max(start_page, min(end_page, total_pages))
+        
+        # Convert to 0-based indexing
+        start_idx = start_page - 1
+        end_idx = end_page - 1
+        
+        # Analyze font hierarchy for the document
+        font_hierarchy = analyze_font_hierarchy(pdf_document)
+        print(f"DEBUG: Font hierarchy detected: {font_hierarchy}")
+        
+        # Process each page
+        all_html_content = []
+        
+        for page_num in range(start_idx, end_idx + 1):
+            if page_num >= total_pages:
+                break
+            
+            page = pdf_document[page_num]
+            page_html = [f"<!-- Page {page_num + 1} -->"]
+            
+            try:
+                # Skip table extraction - ignore tables completely
+                
+                # Extract and process text with enhanced structure detection
+                text_content = process_text_blocks(page, font_hierarchy)
+                page_html.extend(text_content)
+                
+            except Exception as e:
+                print(f"Error processing page {page_num + 1}: {str(e)}")
+                # Fallback to basic text extraction
+                try:
+                    basic_text = page.get_text()
+                    if basic_text.strip():
+                        page_html.append(f"<p>{basic_text}</p>")
+                except Exception as fallback_error:
+                    print(f"Fallback extraction failed for page {page_num + 1}: {fallback_error}")
+                    page_html.append(f"<p><em>Page {page_num + 1} text could not be extracted</em></p>")
+            
+            all_html_content.extend(page_html)
+        
+        # Enhanced image extraction
+        try:
+            image_info = extract_enhanced_images(pdf_document, start_idx, end_idx)
+            print(f"DEBUG: Extracted {len(image_info)} high-quality images")
+        except Exception as e:
+            print(f"Error in enhanced image extraction: {str(e)}")
+            image_info = []
+        
+        # Assemble final HTML with enhanced structure
+        final_html_parts = [
+            "<div class='pdf-content'>",
+            "<div class='pdf-body'>",
+            "\n".join(all_html_content),
+            "</div>",
+            "</div>"
+        ]
+        
+        final_html = "\n".join(final_html_parts)
+        
+        # Clean up HTML
+        final_html = re.sub(r'\n\s*\n', '\n', final_html)  # Remove excessive newlines
+        final_html = re.sub(r'<p>\s*</p>', '', final_html)  # Remove empty paragraphs
+        
+        pdf_document.close()
+        
+        print(f"DEBUG: Successfully processed PDF - Pages: {start_page}-{end_page}, "
+              f"Content length: {len(final_html)}, Images: {len(image_info)}")
+        
+        return final_html, image_info
+        
+    except Exception as e:
+        print(f"ERROR: Enhanced PDF processing failed: {str(e)}")
+        # Fallback to original processing method
+        try:
+            return process_pdf_fallback(file_content, start_page, end_page)
+        except Exception as fallback_error:
+            print(f"ERROR: Fallback processing also failed: {fallback_error}")
+            return f"<div class='pdf-content'><p><em>Error processing PDF: {str(e)}</em></p></div>", []
+
+def process_pdf_fallback(file_content, start_page=None, end_page=None):
+    """Fallback PDF processing using the original method."""
+    print("DEBUG: Using fallback PDF processing method")
+    
     pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
     html_content = []
     current_font_size = None
-    current_font_weight = None
     in_paragraph = False
     last_y = None
     last_text = ""
@@ -553,7 +907,7 @@ def process_pdf(file_content, start_page=None, end_page=None):
     if start_page is None:
         start_page = 1
     if end_page is None:
-        end_page = min(total_pages, 10)  # Default to first 10 pages max
+        end_page = min(total_pages, 10)
     
     # Validate page range against actual PDF
     if start_page > total_pages:
@@ -574,7 +928,7 @@ def process_pdf(file_content, start_page=None, end_page=None):
         page_text = ""
         
         def visitor_body(text, cm, tm, font_dict, font_size):
-            nonlocal page_text, current_font_size, current_font_weight, in_paragraph, last_y, last_text
+            nonlocal page_text, current_font_size, in_paragraph, last_y, last_text
             
             if len(text.strip()) == 0:
                 return
@@ -617,52 +971,60 @@ def process_pdf(file_content, start_page=None, end_page=None):
             last_text = text
             current_font_size = font_size
 
-        page.extract_text(visitor_text=visitor_body)
-        if in_paragraph:
-            page_text += "</p>\n"
-            in_paragraph = False
-        
-        html_content.append(page_text)
-
-    final_html = f"<div class='pdf-content'>\n<p><em>Pages {start_page}-{end_page} of {total_pages}</em></p>\n{''.join(html_content)}</div>"
-
-    # Extract images only from selected pages
-    image_info = []
-    max_images = 20
-    min_size = 100
-
-    pdf_document = fitz.open(stream=file_content, filetype="pdf")
-    
-    for page_num in range(start_idx, end_idx + 1):
-        if len(image_info) >= max_images or page_num >= pdf_document.page_count:
-            break
+        try:
+            page.extract_text(visitor_text=visitor_body)
+            if in_paragraph:
+                page_text += "</p>\n"
+                in_paragraph = False
             
-        page = pdf_document[page_num]
-        image_list = page.get_images()
+            html_content.append(page_text)
+        except Exception as e:
+            print(f"Error extracting text from page {page_num + 1}: {str(e)}")
+            html_content.append(f"<p><em>Page {page_num + 1} text could not be extracted</em></p>")
+
+    final_html = f"<div class='pdf-content'>\n<div class='pdf-body'>\n{''.join(html_content)}\n</div>\n</div>"
+
+    # Basic image extraction
+    image_info = []
+    try:
+        max_images = 20
+        min_size = 100
+
+        pdf_document = fitz.open(stream=file_content, filetype="pdf")
         
-        for img_index, img in enumerate(image_list):
-            if len(image_info) >= max_images:
+        for page_num in range(start_idx, end_idx + 1):
+            if len(image_info) >= max_images or page_num >= pdf_document.page_count:
                 break
                 
-            try:
-                xref = img[0]
-                base_image = pdf_document.extract_image(xref)
-                
-                if base_image.get("width", 0) < min_size or base_image.get("height", 0) < min_size:
+            page = pdf_document[page_num]
+            image_list = page.get_images()
+            
+            for img_index, img in enumerate(image_list):
+                if len(image_info) >= max_images:
+                    break
+                    
+                try:
+                    xref = img[0]
+                    base_image = pdf_document.extract_image(xref)
+                    
+                    if base_image.get("width", 0) < min_size or base_image.get("height", 0) < min_size:
+                        continue
+                    
+                    image_filename = f"page_{page_num + 1}_image_{img_index + 1}.{base_image['ext']}"
+                    
+                    image_info.append({
+                        'filename': image_filename,
+                        'image_bytes': base_image["image"],
+                        'page_number': page_num + 1
+                    })
+                except Exception as e:
+                    print(f"Error extracting image: {str(e)}")
                     continue
-                
-                image_filename = f"page_{page_num + 1}_image_{img_index + 1}.{base_image['ext']}"
-                
-                image_info.append({
-                    'filename': image_filename,
-                    'image_bytes': base_image["image"],
-                    'page_number': page_num + 1
-                })
-            except Exception as e:
-                print(f"Error extracting image: {str(e)}")
-                continue
 
-    pdf_document.close()
+        pdf_document.close()
+    except Exception as e:
+        print(f"Error in fallback image extraction: {str(e)}")
+
     return final_html, image_info
 
 @api_view(['GET'])

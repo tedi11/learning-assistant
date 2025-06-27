@@ -46,13 +46,15 @@ const CourseSelectionModal = React.memo(({
     courses, 
     onClose, 
     onSubmit,
-    loading 
+    loading,
+    coursesLoading 
 }: {
     visible: boolean;
     courses: Course[];
     onClose: () => void;
     onSubmit: (data: { courseId?: number; chapterId?: number; newCourseTitle?: string; newChapterTitle?: string; createNew: boolean }) => void;
     loading: boolean;
+    coursesLoading: boolean;
 }) => {
     const [localState, setLocalState] = useState({
         createNew: false,
@@ -61,6 +63,19 @@ const CourseSelectionModal = React.memo(({
         newCourseTitle: '',
         newChapterTitle: ''
     });
+
+    // Reset state when modal becomes visible
+    React.useEffect(() => {
+        if (visible) {
+            setLocalState({
+                createNew: false,
+                selectedCourse: null,
+                selectedChapter: null,
+                newCourseTitle: '',
+                newChapterTitle: ''
+            });
+        }
+    }, [visible]);
 
     const resetLocalState = () => {
         setLocalState({
@@ -78,11 +93,28 @@ const CourseSelectionModal = React.memo(({
     };
 
     const handleSubmit = () => {
+        // Validation
+        if (localState.createNew) {
+            if (!localState.newCourseTitle.trim()) {
+                Alert.alert('Error', 'Please enter a course title');
+                return;
+            }
+        } else {
+            if (!localState.selectedCourse) {
+                Alert.alert('Error', 'Please select a course');
+                return;
+            }
+            if (!localState.selectedChapter && !localState.newChapterTitle.trim()) {
+                Alert.alert('Error', 'Please select a chapter or enter a new chapter title');
+                return;
+            }
+        }
+
         onSubmit({
             courseId: localState.selectedCourse?.id,
             chapterId: localState.selectedChapter?.id,
-            newCourseTitle: localState.createNew ? localState.newCourseTitle : undefined,
-            newChapterTitle: localState.newChapterTitle || undefined,
+            newCourseTitle: localState.createNew ? localState.newCourseTitle.trim() : undefined,
+            newChapterTitle: localState.newChapterTitle.trim() || undefined,
             createNew: localState.createNew
         });
     };
@@ -127,68 +159,80 @@ const CourseSelectionModal = React.memo(({
                         </>
                     ) : (
                         <>
-                            <ScrollView style={styles.courseList}>
-                                {courses.map(course => (
-                                    <View key={course.id}>
-                                        <TouchableOpacity
-                                            style={[
-                                                styles.courseOption,
-                                                localState.selectedCourse?.id === course.id && styles.selectedOption
-                                            ]}
-                                            onPress={() => setLocalState(prev => ({
-                                                ...prev,
-                                                selectedCourse: course,
-                                                selectedChapter: null,
-                                                createNew: false
-                                            }))}
-                                        >
-                                            <Text style={styles.courseTitle}>{course.title}</Text>
-                                        </TouchableOpacity>
+                            {coursesLoading ? (
+                                <View style={styles.emptyCourseState}>
+                                    <Text style={styles.emptyCourseText}>Loading courses...</Text>
+                                </View>
+                            ) : courses.length === 0 ? (
+                                <View style={styles.emptyCourseState}>
+                                    <Text style={styles.emptyCourseText}>
+                                        No courses available. Create a new course to continue.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <ScrollView style={styles.courseList}>
+                                    {courses.map(course => (
+                                        <View key={course.id}>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.courseOption,
+                                                    localState.selectedCourse?.id === course.id && styles.selectedOption
+                                                ]}
+                                                onPress={() => setLocalState(prev => ({
+                                                    ...prev,
+                                                    selectedCourse: course,
+                                                    selectedChapter: null,
+                                                    createNew: false
+                                                }))}
+                                            >
+                                                <Text style={styles.courseTitle}>{course.title}</Text>
+                                            </TouchableOpacity>
 
-                                        {localState.selectedCourse?.id === course.id && (
-                                            <View style={styles.chapterList}>
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.chapterOption,
-                                                        !localState.selectedChapter && styles.selectedOption
-                                                    ]}
-                                                    onPress={() => setLocalState(prev => ({
-                                                        ...prev,
-                                                        selectedChapter: null,
-                                                        newChapterTitle: ''
-                                                    }))}
-                                                >
-                                                    <Text style={styles.chapterTitle}>Create New Chapter</Text>
-                                                </TouchableOpacity>
-                                                {!localState.selectedChapter && (
-                                                    <TextInput
-                                                        style={styles.input}
-                                                        placeholder="Enter new chapter title"
-                                                        value={localState.newChapterTitle}
-                                                        onChangeText={(text) => setLocalState(prev => ({ ...prev, newChapterTitle: text }))}
-                                                    />
-                                                )}
-                                                {course.chapters.map(chapter => (
+                                            {localState.selectedCourse?.id === course.id && (
+                                                <View style={styles.chapterList}>
                                                     <TouchableOpacity
-                                                        key={chapter.id}
                                                         style={[
                                                             styles.chapterOption,
-                                                            localState.selectedChapter?.id === chapter.id && styles.selectedOption
+                                                            !localState.selectedChapter && styles.selectedOption
                                                         ]}
                                                         onPress={() => setLocalState(prev => ({
                                                             ...prev,
-                                                            selectedChapter: chapter,
+                                                            selectedChapter: null,
                                                             newChapterTitle: ''
                                                         }))}
                                                     >
-                                                        <Text style={styles.chapterTitle}>{chapter.title}</Text>
+                                                        <Text style={styles.chapterTitle}>Create New Chapter</Text>
                                                     </TouchableOpacity>
-                                                ))}
-                                            </View>
-                                        )}
-                                    </View>
-                                ))}
-                            </ScrollView>
+                                                    {!localState.selectedChapter && (
+                                                        <TextInput
+                                                            style={styles.input}
+                                                            placeholder="Enter new chapter title"
+                                                            value={localState.newChapterTitle}
+                                                            onChangeText={(text) => setLocalState(prev => ({ ...prev, newChapterTitle: text }))}
+                                                        />
+                                                    )}
+                                                    {course.chapters.map(chapter => (
+                                                        <TouchableOpacity
+                                                            key={chapter.id}
+                                                            style={[
+                                                                styles.chapterOption,
+                                                                localState.selectedChapter?.id === chapter.id && styles.selectedOption
+                                                            ]}
+                                                            onPress={() => setLocalState(prev => ({
+                                                                ...prev,
+                                                                selectedChapter: chapter,
+                                                                newChapterTitle: ''
+                                                            }))}
+                                                        >
+                                                            <Text style={styles.chapterTitle}>{chapter.title}</Text>
+                                                        </TouchableOpacity>
+                                                    ))}
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            )}
                         </>
                     )}
 
@@ -408,6 +452,7 @@ export default function LoadDocumentsScreen() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(false);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [coursesLoading, setCoursesLoading] = useState(false);
     const [showCourseModal, setShowCourseModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerResult | null>(null);
     
@@ -434,8 +479,12 @@ export default function LoadDocumentsScreen() {
 
     const fetchCourses = async () => {
         try {
+            setCoursesLoading(true);
             const token = await authService.getToken();
-            if (!token) return;
+            if (!token) {
+                console.log('No token available for fetching courses');
+                return;
+            }
 
             const response = await axios.get('http://192.168.1.135:8000/api/courses/', {
                 headers: {
@@ -443,14 +492,20 @@ export default function LoadDocumentsScreen() {
                 }
             });
             setCourses(response.data);
+            console.log(`Fetched ${response.data.length} courses`);
         } catch (error) {
             console.error('Error fetching courses:', error);
+            Alert.alert('Error', 'Failed to load courses. Please try again.');
+            setCourses([]); // Reset courses on error
+        } finally {
+            setCoursesLoading(false);
         }
     };
 
     useFocusEffect(
         useCallback(() => {
             fetchDocuments();
+            fetchCourses(); // Always fetch courses when screen is focused
         }, [])
     );
 
@@ -483,8 +538,9 @@ export default function LoadDocumentsScreen() {
 
     const handleUpload = async () => {
         try {
-            // Fetch courses only when needed
+            // Ensure courses are available (they should be loaded on screen focus)
             if (courses.length === 0) {
+                console.log('Courses not loaded, fetching...');
                 await fetchCourses();
             }
 
@@ -735,6 +791,7 @@ export default function LoadDocumentsScreen() {
                 }}
                 onSubmit={handleConfirmUpload}
                 loading={loading}
+                coursesLoading={coursesLoading}
             />
 
             <PageRangeModal
@@ -1088,5 +1145,20 @@ const styles = StyleSheet.create({
         elevation: 8,
         borderWidth: 1,
         borderColor: '#f0f0f0',
+    },
+    emptyCourseState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+        marginTop: 60,
+    },
+    emptyCourseText: {
+        fontSize: 20,
+        color: '#666',
+        marginTop: 20,
+        marginBottom: 12,
+        fontWeight: '600',
+        textAlign: 'center',
     },
 }); 

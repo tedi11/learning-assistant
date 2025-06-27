@@ -609,7 +609,7 @@ export default function ChapterScreen() {
                                         source={{ html: visibleContent }}
                                         tagsStyles={{
                                             div: {
-                                                marginVertical: 8,
+                                                marginVertical: 4,
                                             },
                                             'div.pdf-content': {
                                                 paddingHorizontal: 16,
@@ -618,22 +618,22 @@ export default function ChapterScreen() {
                                                 fontSize: 28 * textScale,
                                                 fontWeight: 'bold',
                                                 color: '#333',
-                                                marginVertical: 24,
-                                                marginTop: 32,
+                                                marginVertical: 8,
+                                                marginTop: 12,
                                             },
                                             h2: {
                                                 fontSize: 24 * textScale,
                                                 fontWeight: 'bold',
                                                 color: '#333',
-                                                marginVertical: 20,
-                                                marginTop: 28,
+                                                marginVertical: 6,
+                                                marginTop: 10,
                                             },
                                             h3: {
                                                 fontSize: 20 * textScale,
                                                 fontWeight: 'bold',
                                                 color: '#333',
-                                                marginVertical: 16,
-                                                marginTop: 24,
+                                                marginVertical: 4,
+                                                marginTop: 8,
                                             },
                                             p: {
                                                 fontSize: 16 * textScale,
@@ -645,32 +645,36 @@ export default function ChapterScreen() {
                                             },
                                             ul: {
                                                 marginLeft: 20,
-                                                marginVertical: 8,
+                                                marginVertical: 4,
                                             },
                                             ol: {
                                                 marginLeft: 20,
-                                                marginVertical: 8,
+                                                marginVertical: 4,
                                             },
                                             li: {
                                                 fontSize: 16 * textScale,
                                                 color: '#333',
                                                 lineHeight: 24 * textScale,
-                                                marginVertical: 2,
+                                                marginVertical: 1,
                                             },
                                             strong: {
                                                 fontWeight: 'bold',
                                                 color: '#222',
                                             },
+                                            em: {
+                                                fontStyle: 'italic',
+                                                color: '#444',
+                                            },
                                             pre: {
                                                 backgroundColor: '#f5f5f5',
                                                 padding: 16,
                                                 borderRadius: 8,
-                                                marginVertical: 12,
+                                                marginVertical: 8,
                                                 fontSize: 14 * textScale,
                                             },
                                             img: {
                                                 borderRadius: 8,
-                                                marginVertical: 16,
+                                                marginVertical: 12,
                                             }
                                         }}
                                         enableExperimentalBRCollapsing={true}
@@ -697,6 +701,9 @@ export default function ChapterScreen() {
                                                 shadowOpacity: 0.1,
                                                 shadowRadius: 4,
                                                 elevation: 3,
+                                            },
+                                            'pdf-body': {
+                                                backgroundColor: 'transparent',
                                             }
                                         }}
                                     />
