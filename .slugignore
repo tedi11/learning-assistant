@@ -1,0 +1,10 @@
+node_modules/
+.git/
+.venv/
+*.log
+*.env
+*.sqlite3  # If using SQLite locally
+.pytest_cache/
+.tox/
+.coverage
+test/
