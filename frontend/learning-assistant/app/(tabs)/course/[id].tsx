@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import authService from '@/services/authService';
-import axios from 'axios';
+import { api } from '@/services/api';
 
 interface Chapter {
     id: number;
@@ -95,21 +95,15 @@ export default function CourseScreen() {
             }
 
             lastFetchRef.current = id as string;
-            const response = await axios.get(`http://192.168.1.135:8000/api/courses/${id}/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get(`/courses/${id}/`);
             setCourse(response.data);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching course:', error);
-            if (axios.isAxiosError(error)) {
-                if (error.response?.status === 401) {
-                    router.replace('/(auth)/login');
-                } else if (error.response?.status === 403) {
-                    router.back();
-                    Alert.alert('Error', 'You do not have permission to access this course.');
-                }
+            if (error.response?.status === 401) {
+                router.replace('/(auth)/login');
+            } else if (error.response?.status === 403) {
+                router.back();
+                Alert.alert('Error', 'You do not have permission to access this course.');
             }
         } finally {
             setLoading(false);
@@ -183,15 +177,7 @@ export default function CourseScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const token = await authService.getToken();
-                            await axios.delete(
-                                `http://192.168.1.135:8000/api/courses/${id}/chapters/${selectedChapterId}/`,
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`
-                                    }
-                                }
-                            );
+                            await api.delete(`/courses/${id}/chapters/${selectedChapterId}/`);
                             setSelectedChapterId(null);
                             fetchCourse();
                         } catch (error) {

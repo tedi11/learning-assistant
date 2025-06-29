@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator
 import { useRouter } from 'expo-router';
 import authService from '@/services/authService';
 import { CourseCard } from '@/components/CourseCard';
-import axios from 'axios';
+import { api } from '@/services/api';
 
 interface Course {
     id: number;
@@ -28,15 +28,11 @@ export default function HomeScreen() {
                 return;
             }
 
-            const response = await axios.get('http://192.168.1.135:8000/api/courses/', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get('/courses/');
             setCourses(response.data);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching courses:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 401) {
+            if (error.response?.status === 401) {
                 router.replace('/(auth)/login');
             }
         } finally {
@@ -97,19 +93,10 @@ export default function HomeScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            const token = await authService.getToken();
-                            
                             // Delete all selected courses
                             await Promise.all(
                                 selectedCourseIds.map(courseId =>
-                                    axios.delete(
-                                        `http://192.168.1.135:8000/api/courses/${courseId}/`,
-                                        {
-                                            headers: {
-                                                'Authorization': `Bearer ${token}`
-                                            }
-                                        }
-                                    )
+                                    api.delete(`/courses/${courseId}/`)
                                 )
                             );
                             

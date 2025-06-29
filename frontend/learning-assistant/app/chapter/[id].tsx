@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import RenderHtml from 'react-native-render-html';
 import authService from '@/services/authService';
-import axios from 'axios';
+import { api } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 
@@ -194,45 +194,26 @@ export default function ChapterScreen() {
                 return;
             }
 
-            const response = await axios.get(`http://192.168.1.135:8000/api/courses/${courseId}/chapters/${id}/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get(`/courses/${courseId}/chapters/${id}/`);
             setChapter(response.data);
-
-            // Fetch the document ID for this chapter
-            const documentsResponse = await axios.get(`http://192.168.1.135:8000/api/documents/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
             
-            const chapterDocument = documentsResponse.data.find(
-                (doc: any) => doc.chapterId === Number(id)
-            );
-            
-            if (chapterDocument) {
-                setDocumentId(chapterDocument.id);
+            // Fetch documents to get document ID
+            const documentsResponse = await api.get('/documents/');
+            const document = documentsResponse.data.find((doc: any) => doc.course_id === parseInt(courseId as string));
+            if (document) {
+                setDocumentId(document.id);
+                
+                // Fetch attachments for this document
+                const attachmentsResponse = await api.get(`/documents/${document.id}/attachments/`);
+                setAttachments(attachmentsResponse.data);
             }
         } catch (error) {
             console.error('Error fetching chapter:', error);
-            if (axios.isAxiosError(error)) {
-                if (error.response?.status === 401) {
-                    router.replace('/(auth)/login');
-                } else if (error.response?.status === 403) {
-                    router.push({
-                        pathname: "/course/[id]",
-                        params: { id: courseId as string }
-                    });
-                    Alert.alert('Error', 'You do not have permission to access this chapter.');
-                }
-            }
+            Alert.alert('Error', 'Failed to load chapter');
         } finally {
             setLoading(false);
-            setRefreshing(false);
         }
-    }, [id, courseId]);
+    }, [id, courseId, router]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -246,11 +227,7 @@ export default function ChapterScreen() {
             const token = await authService.getToken();
             if (!token) return;
 
-            const response = await axios.get(`http://192.168.1.135:8000/api/documents/${documentId}/attachments/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get(`/documents/${documentId}/attachments/`);
             setAttachments(response.data);
         } catch (error) {
             console.error('Error fetching attachments:', error);
@@ -282,8 +259,8 @@ export default function ChapterScreen() {
             const noteId = chapter?.notes[0]?.id;
             if (!noteId) return;
 
-            await axios.patch(
-                `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${id}/notes/${noteId}/`,
+            await api.patch(
+                `/courses/${courseId}/chapters/${id}/notes/${noteId}/`,
                 { progress: newProgress },
                 {
                     headers: {

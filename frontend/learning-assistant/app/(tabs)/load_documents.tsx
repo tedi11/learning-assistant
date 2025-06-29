@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Ale
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import authService from '@/services/authService';
-import axios from 'axios';
+import { api } from '@/services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
@@ -463,14 +463,7 @@ export default function LoadDocumentsScreen() {
 
     const fetchDocuments = async () => {
         try {
-            const token = await authService.getToken();
-            if (!token) return;
-
-            const response = await axios.get('http://192.168.1.135:8000/api/documents/', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get('/documents/');
             setDocuments(response.data);
         } catch (error) {
             console.error('Error fetching documents:', error);
@@ -479,26 +472,10 @@ export default function LoadDocumentsScreen() {
 
     const fetchCourses = async () => {
         try {
-            setCoursesLoading(true);
-            const token = await authService.getToken();
-            if (!token) {
-                console.log('No token available for fetching courses');
-                return;
-            }
-
-            const response = await axios.get('http://192.168.1.135:8000/api/courses/', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get('/courses/');
             setCourses(response.data);
-            console.log(`Fetched ${response.data.length} courses`);
         } catch (error) {
             console.error('Error fetching courses:', error);
-            Alert.alert('Error', 'Failed to load courses. Please try again.');
-            setCourses([]); // Reset courses on error
-        } finally {
-            setCoursesLoading(false);
         }
     };
 
@@ -510,29 +487,23 @@ export default function LoadDocumentsScreen() {
     );
 
     const getPdfInfo = async (file: DocumentPicker.DocumentPickerAsset) => {
+        const formData = new FormData();
+        formData.append('file', {
+            uri: file.uri,
+            type: 'application/pdf',
+            name: file.name || 'document.pdf'
+        } as any);
+
         try {
-            const token = await authService.getToken();
-            if (!token) return null;
-
-            const formData = new FormData();
-            formData.append('file', {
-                uri: file.uri,
-                type: 'application/pdf',
-                name: file.name
-            } as any);
-
-            const response = await axios.post('http://192.168.1.135:8000/api/documents/pdf-info/', formData, {
+            const response = await api.post('/documents/pdf-info/', formData, {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'multipart/form-data',
-                }
+                },
             });
-
-            return response.data as PDFInfo;
+            return response.data;
         } catch (error) {
             console.error('Error getting PDF info:', error);
-            Alert.alert('Error', 'Failed to analyze PDF file');
-            return null;
+            throw error;
         }
     };
 
@@ -635,7 +606,7 @@ export default function LoadDocumentsScreen() {
                 formData.append('endPage', selectedPageRange.endPage.toString());
             }
 
-            const response = await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
+            const response = await api.post('/documents/upload/', formData, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'multipart/form-data',
@@ -669,7 +640,7 @@ export default function LoadDocumentsScreen() {
                                     formData.append('forceUpload', 'true');
                                     
                                     // Retry the upload with force flag
-                                    await axios.post('http://192.168.1.135:8000/api/documents/upload/', formData, {
+                                    await api.post('/documents/upload/', formData, {
                                         headers: {
                                             'Authorization': `Bearer ${token}`,
                                             'Content-Type': 'multipart/form-data',
