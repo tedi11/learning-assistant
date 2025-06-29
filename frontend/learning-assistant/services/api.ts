@@ -2,58 +2,51 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { Course, Chapter } from '@/types';
+import { API_CONFIG, API_ENDPOINTS } from '@/constants/ApiConfig';
 
-// Get the correct API URL based on platform
-const getApiUrl = () => {
-  // Use the droplet IP address for all platforms
-  return 'http://138.197.185.249:8000/api';
-};
-
-const BASE_URL = getApiUrl();
+// Use the centralized API configuration
+const BASE_URL = API_CONFIG.BASE_URL;
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-  timeout: 120000, // 120 second timeout (increased from 30 seconds)
+  headers: API_CONFIG.DEFAULT_HEADERS,
+  timeout: API_CONFIG.TIMEOUT,
 });
 
 // API methods for courses
 export const courseApi = {
-  getCourses: () => api.get<Course[]>('/courses/'),
-  getCourse: (id: number) => api.get<Course>(`/courses/${id}/`),
-  createCourse: (data: Partial<Course>) => api.post<Course>('/courses/', data),
-  updateCourse: (id: number, data: Partial<Course>) => api.put<Course>(`/courses/${id}/`, data),
-  deleteCourse: (id: number) => api.delete(`/courses/${id}/`),
+  getCourses: () => api.get<Course[]>(API_ENDPOINTS.COURSES),
+  getCourse: (id: number) => api.get<Course>(API_ENDPOINTS.COURSE_DETAIL(id)),
+  createCourse: (data: Partial<Course>) => api.post<Course>(API_ENDPOINTS.COURSES, data),
+  updateCourse: (id: number, data: Partial<Course>) => api.put<Course>(API_ENDPOINTS.COURSE_DETAIL(id), data),
+  deleteCourse: (id: number) => api.delete(API_ENDPOINTS.COURSE_DETAIL(id)),
 };
 
 // API methods for chapters
 export const chapterApi = {
   getChapters: (courseId: number) => {
     console.log('Fetching chapters for course:', courseId);
-    return api.get<Chapter[]>(`/courses/${courseId}/chapters/`);
+    return api.get<Chapter[]>(API_ENDPOINTS.CHAPTERS(courseId));
   },
   getChapter: (courseId: number, chapterId: number) => 
-    api.get<Chapter>(`/courses/${courseId}/chapters/${chapterId}/`),
+    api.get<Chapter>(API_ENDPOINTS.CHAPTER_DETAIL(courseId, chapterId)),
   createChapter: (courseId: number, data: Partial<Chapter>) => 
-    api.post<Chapter>(`/courses/${courseId}/chapters/`, data),
+    api.post<Chapter>(API_ENDPOINTS.CHAPTERS(courseId), data),
   updateChapter: (courseId: number, chapterId: number, data: Partial<Chapter>) => 
-    api.put<Chapter>(`/courses/${courseId}/chapters/${chapterId}/`, data),
+    api.put<Chapter>(API_ENDPOINTS.CHAPTER_DETAIL(courseId, chapterId), data),
   deleteChapter: (courseId: number, chapterId: number) => 
-    api.delete(`/courses/${courseId}/chapters/${chapterId}/`),
+    api.delete(API_ENDPOINTS.CHAPTER_DETAIL(courseId, chapterId)),
 };
 
 // API methods for questions
 export const questionApi = {
   generateQuestions: (chapterId: number, questionCount: number = 5, questionType: string = 'mixed') => 
-    api.post('/generate-questions/', { chapterId, questionCount, questionType }),
+    api.post(API_ENDPOINTS.GENERATE_QUESTIONS, { chapterId, questionCount, questionType }),
   saveCorrectAnswers: (chapterId: number, correctAnswers: Array<{questionText: string, questionType: string, answer: string}>) => {
     console.log('=== API CALL: saveCorrectAnswers ===');
     console.log('Request data:', { chapterId, correctAnswers });
-    console.log('Request URL: /save-correct-answers/');
-    return api.post('/save-correct-answers/', { chapterId, correctAnswers });
+    console.log('Request URL:', API_ENDPOINTS.SAVE_CORRECT_ANSWERS);
+    return api.post(API_ENDPOINTS.SAVE_CORRECT_ANSWERS, { chapterId, correctAnswers });
   },
 };
 
@@ -117,7 +110,7 @@ api.interceptors.response.use(
         }
 
         console.log('Attempting to refresh token...');
-        const response = await axios.post(`${BASE_URL}/login/refresh/`, {
+        const response = await axios.post(`${BASE_URL}${API_ENDPOINTS.REFRESH_TOKEN}`, {
           refresh: refreshToken,
         });
 
