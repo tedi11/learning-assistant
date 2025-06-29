@@ -5,13 +5,8 @@ import { Course, Chapter } from '@/types';
 
 // Get the correct API URL based on platform
 const getApiUrl = () => {
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8000/api'; // Android emulator
-  } else if (Platform.OS === 'ios') {
-    return 'http://192.168.1.135:8000/api'; // iOS simulator
-  } else {
-    return 'http://192.168.1.135:8000/api'; // Web/desktop
-  }
+  // Use the droplet IP address for all platforms
+  return 'http://138.197.185.249:8000/api';
 };
 
 const BASE_URL = getApiUrl();

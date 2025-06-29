@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ScrollVi
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
 import authService from '@/services/authService';
-import axios from 'axios';
+import { api } from '@/services/api';
 
 export default function EditChapterScreen() {
     const router = useRouter();
@@ -30,32 +30,24 @@ export default function EditChapterScreen() {
             }
 
             // Get the first note if it exists (since we only allow one note per chapter)
-            const response = await axios.get(`http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/notes/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get(`/courses/${courseId}/chapters/${chapterId}/notes/`);
 
             const notes = response.data;
             const method = notes.length > 0 ? 'put' : 'post';
             const url = notes.length > 0 
-                ? `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/notes/${notes[0].id}/`
-                : `http://192.168.1.135:8000/api/courses/${courseId}/chapters/${chapterId}/notes/`;
+                ? `/courses/${courseId}/chapters/${chapterId}/notes/${notes[0].id}/`
+                : `/courses/${courseId}/chapters/${chapterId}/notes/`;
 
             // Preserve the existing progress value if updating
             const existingProgress = notes.length > 0 ? notes[0].progress : 0;
 
-            await axios({
+            await api({
                 method,
                 url,
                 data: { 
                     content: content.trim(),
                     progress: existingProgress, // Preserve progress when updating
                     summary: null // Clear the summary when content is edited
-                },
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
                 }
             });
 

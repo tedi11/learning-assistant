@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import axios from 'axios';
+import { api } from '@/services/api';
 import authService from '@/services/authService';
 
 export default function CreateCourseScreen() {
@@ -25,20 +25,10 @@ export default function CreateCourseScreen() {
                 return;
             }
 
-            const response = await axios.post(
-                'http://192.168.1.135:8000/api/courses/',
-                {
-                    title: title.trim(),
-                    description: description.trim() || '' // Ensure description is never undefined
-                },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    }
-                }
-            );
+            const response = await api.post('/courses/', {
+                title: title.trim(),
+                description: description.trim() || '' // Ensure description is never undefined
+            });
             
             if (response.status === 201 || response.status === 200) {
                 Alert.alert('Success', 'Course created successfully', [{

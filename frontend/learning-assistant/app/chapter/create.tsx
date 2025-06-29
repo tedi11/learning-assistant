@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import axios from 'axios';
+import { api } from '@/services/api';
 import authService from '@/services/authService';
 
 export default function CreateChapterScreen() {
@@ -27,15 +27,11 @@ export default function CreateChapterScreen() {
             console.log('Creating chapter:', {
                 courseId,
                 title: title.trim(),
-                url: `http://192.168.1.135:8000/api/courses/${courseId}/chapters/`
+                url: `/courses/${courseId}/chapters/`
             });
 
-            const response = await axios.post(`http://192.168.1.135:8000/api/courses/${courseId}/chapters/`, {
+            const response = await api.post(`/courses/${courseId}/chapters/`, {
                 title: title.trim(),
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
             });
 
             console.log('Chapter created:', response.data);
@@ -50,9 +46,6 @@ export default function CreateChapterScreen() {
             });
         } catch (error) {
             console.error('Error creating chapter:', error);
-            if (axios.isAxiosError(error)) {
-                console.error('API Error:', error.response?.data);
-            }
             Alert.alert(
                 'Error',
                 'Failed to create chapter. Please try again.'

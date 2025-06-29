@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator, Alert, TextInput, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import authService from '@/services/authService';
-import axios from 'axios';
+import { api } from '@/services/api';
 
 interface UserProfile {
     username: string;
@@ -34,11 +34,7 @@ export default function ProfileScreen() {
                 return;
             }
 
-            const response = await axios.get('http://192.168.1.135:8000/api/profile/', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await api.get('/profile/');
             setProfile(response.data);
             setEditForm({
                 username: response.data.username,
@@ -46,9 +42,9 @@ export default function ProfileScreen() {
                 first_name: response.data.first_name || '',
                 last_name: response.data.last_name || '',
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching profile:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 401) {
+            if (error.response?.status === 401) {
                 router.replace('/(auth)/login');
             }
         } finally {
@@ -95,27 +91,21 @@ export default function ProfileScreen() {
                 return;
             }
 
-            const response = await axios.put('http://192.168.1.135:8000/api/profile/', {
+            const response = await api.put('/profile/', {
                 username: editForm.username,
                 first_name: editForm.first_name,
                 last_name: editForm.last_name,
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
             });
 
             setIsEditing(false);
             fetchProfile();
             Alert.alert('Success', 'Profile updated successfully');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating profile:', error);
-            if (axios.isAxiosError(error)) {
-                if (error.response?.status === 401) {
-                    router.replace('/(auth)/login');
-                } else {
-                    Alert.alert('Error', error.response?.data?.message || 'Failed to update profile');
-                }
+            if (error.response?.status === 401) {
+                router.replace('/(auth)/login');
+            } else {
+                Alert.alert('Error', error.response?.data?.message || 'Failed to update profile');
             }
         }
     };
