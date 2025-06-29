@@ -40,12 +40,9 @@ class AuthService {
     async login(email: string, password: string): Promise<LoginResponse> {
         try {
             console.log('Attempting to login with:', { email });
-            const response = await axios.post<LoginResponse>(`${API_URL}${API_ENDPOINTS.LOGIN}`, {
+            const response = await api.post<LoginResponse>(API_ENDPOINTS.LOGIN, {
                 email,
                 password,
-            }, {
-                timeout: API_CONFIG.TIMEOUT,
-                headers: API_CONFIG.DEFAULT_HEADERS
             });
 
             if (response.data.access) {
@@ -92,7 +89,7 @@ class AuthService {
             throw new Error('No refresh token found');
         }
 
-        const response = await axios.post(`${API_URL}${API_ENDPOINTS.REFRESH_TOKEN}`, {
+        const response = await api.post(API_ENDPOINTS.REFRESH_TOKEN, {
             refresh: refreshToken,
         });
 
@@ -158,16 +155,13 @@ class AuthService {
     ): Promise<void> {
         try {
             console.log('Attempting to register with:', { email, username, firstName, lastName });
-            const response = await axios.post(`${API_URL}${API_ENDPOINTS.REGISTER}`, {
+            const response = await api.post(API_ENDPOINTS.REGISTER, {
                 email,
                 username,
                 first_name: firstName,
                 last_name: lastName,
                 password,
                 password2
-            }, {
-                timeout: API_CONFIG.TIMEOUT,
-                headers: API_CONFIG.DEFAULT_HEADERS
             });
             console.log('Registration response:', response.data);
             return response.data;
