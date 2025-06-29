@@ -4,5 +4,9 @@
     "react-native-pell-rich-editor": "^1.9.0",
     "react-native-webview": "^13.13.5",
     "expo-updates": "~0.28.15"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3",
+    "@types/react": "~19.0.10"
   }
 }
