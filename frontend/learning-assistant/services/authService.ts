@@ -2,14 +2,10 @@ import axios, { AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { api } from './api'; // Import the configured api instance
+import { API_CONFIG, API_ENDPOINTS } from '@/constants/ApiConfig';
 
-// Get the correct API URL based on platform
-const getApiUrl = () => {
-    // Use the droplet IP address for all platforms
-    return 'http://138.197.185.249:8000/api';
-};
-
-const API_URL = getApiUrl();
+// Use the centralized API configuration
+const API_URL = API_CONFIG.BASE_URL;
 
 interface LoginResponse {
     access: string;
@@ -44,15 +40,12 @@ class AuthService {
     async login(email: string, password: string): Promise<LoginResponse> {
         try {
             console.log('Attempting to login with:', { email });
-            const response = await axios.post<LoginResponse>(`${API_URL}/login/`, {
+            const response = await axios.post<LoginResponse>(`${API_URL}${API_ENDPOINTS.LOGIN}`, {
                 email,
                 password,
             }, {
-                timeout: 120000, // 120 second timeout (increased from 30 seconds)
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                timeout: API_CONFIG.TIMEOUT,
+                headers: API_CONFIG.DEFAULT_HEADERS
             });
 
             if (response.data.access) {
@@ -99,7 +92,7 @@ class AuthService {
             throw new Error('No refresh token found');
         }
 
-        const response = await axios.post(`${API_URL}/login/refresh/`, {
+        const response = await axios.post(`${API_URL}${API_ENDPOINTS.REFRESH_TOKEN}`, {
             refresh: refreshToken,
         });
 
@@ -165,7 +158,7 @@ class AuthService {
     ): Promise<void> {
         try {
             console.log('Attempting to register with:', { email, username, firstName, lastName });
-            const response = await axios.post(`${API_URL}/register/`, {
+            const response = await axios.post(`${API_URL}${API_ENDPOINTS.REGISTER}`, {
                 email,
                 username,
                 first_name: firstName,
@@ -173,11 +166,8 @@ class AuthService {
                 password,
                 password2
             }, {
-                timeout: 120000, // 120 second timeout (increased from 30 seconds)
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                timeout: API_CONFIG.TIMEOUT,
+                headers: API_CONFIG.DEFAULT_HEADERS
             });
             console.log('Registration response:', response.data);
             return response.data;
@@ -217,7 +207,7 @@ class AuthService {
 
         console.log('Token is valid, making API call...');
         // Use the api instance instead of direct axios to benefit from interceptors
-        return api.get<UserProfile>('/profile/');
+        return api.get<UserProfile>(API_ENDPOINTS.PROFILE);
     }
 }
 
